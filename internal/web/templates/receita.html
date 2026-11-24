@@ -1,0 +1,108 @@
+{{define "conteudo"}}
+{{$f := .Form}}
+<header class="sticky top-0 z-40 bg-surface/85 backdrop-blur-xl pt-safe">
+  <div class="h-16 px-3 flex items-center gap-2 max-w-xl mx-auto">
+    <a href="/receitas{{if $f.ID}}?aberta={{$f.ID}}#receita-{{$f.ID}}{{end}}" aria-label="Voltar" class="w-10 h-10 rounded-full flex items-center justify-center hover:bg-surface-container-low">
+      <span class="icone">arrow_back</span>
+    </a>
+    <h1 class="text-xl font-bold">{{.Titulo}}</h1>
+  </div>
+</header>
+<main class="max-w-xl mx-auto px-5 pb-16">
+  <form id="form-receita" method="post" action="/receitas{{if $f.ID}}/{{$f.ID}}{{end}}" class="space-y-4">
+    {{if $f.Erro}}<p class="bg-error-container text-on-error-container rounded-2xl px-4 py-3 text-sm" role="alert">{{$f.Erro}}</p>{{end}}
+
+    <label class="block bg-card rounded-2xl px-4 py-3 shadow-sm">
+      <span class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Nome</span>
+      <input name="nome" value="{{$f.Nome}}" required maxlength="120" placeholder="Marmita de frango com batata"
+        class="block w-full bg-transparent text-base font-semibold placeholder:text-on-surface-variant/60 focus:outline-none mt-0.5">
+    </label>
+
+    <section class="bg-card rounded-3xl p-4 shadow-sm space-y-3">
+      <div>
+        <h2 class="font-semibold">Ingredientes da panela</h2>
+        <p class="text-xs text-on-surface-variant">Em gramas, do jeito que foram para a panela.</p>
+      </div>
+      <ul id="ingredientes" class="space-y-2">
+        {{range $f.Itens}}{{template "ingrediente" .}}{{end}}
+      </ul>
+      <div class="relative">
+        <span class="icone absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
+        <input type="search" name="q" placeholder="Adicionar ingrediente" autocomplete="off" form="busca-ingrediente"
+          class="w-full h-12 pl-10 pr-3 rounded-2xl bg-surface-container-low text-sm placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary"
+          hx-get="/ingredientes" hx-trigger="input changed delay:250ms, search" hx-target="#busca-resultados">
+      </div>
+      <div id="busca-resultados"></div>
+    </section>
+
+    <section class="bg-card rounded-3xl p-4 shadow-sm space-y-3">
+      <h2 class="font-semibold">Rendimento</h2>
+      <label class="flex items-center justify-between gap-3">
+        <span class="text-sm">
+          <span class="font-semibold">Peso pronto</span>
+          <span class="block text-xs text-on-surface-variant">Pese a panela pronta, sem a panela. Vazio usa a soma dos ingredientes.</span>
+        </span>
+        <span class="flex items-baseline gap-1 shrink-0">
+          <input name="rendimento_g" inputmode="decimal" value="{{if $f.RendimentoG}}{{campo $f.RendimentoG}}{{end}}" placeholder="—"
+            class="w-20 text-right text-lg font-bold bg-surface-container-low rounded-xl px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary">
+          <span class="text-sm text-on-surface-variant">g</span>
+        </span>
+      </label>
+      <div class="grid grid-cols-[auto_1fr] gap-3 items-center">
+        <label class="flex flex-col">
+          <span class="text-xs font-semibold text-on-surface-variant">Porções</span>
+          <input name="n_porcoes" type="number" min="1" max="100" value="{{$f.NPorcoes}}" required
+            class="w-20 text-lg font-bold bg-surface-container-low rounded-xl px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary">
+        </label>
+        <label class="flex flex-col">
+          <span class="text-xs font-semibold text-on-surface-variant">Nome da porção</span>
+          <input name="nome_porcao" value="{{$f.NomePorcao}}" maxlength="40" placeholder="1 marmita"
+            class="text-lg font-bold bg-surface-container-low rounded-xl px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary">
+        </label>
+      </div>
+    </section>
+
+    <button class="w-full h-14 rounded-full bg-primary text-on-primary font-bold shadow-sm active:scale-95">Salvar receita</button>
+    {{if $f.ID}}<p class="text-center text-xs text-on-surface-variant">Os registros já feitos com esta receita não mudam.</p>{{end}}
+  </form>
+  <form id="busca-ingrediente" onsubmit="return false"></form>
+</main>
+{{end}}
+
+{{define "ingrediente"}}
+<li class="flex items-center gap-2 pl-3 pr-1 py-1 rounded-2xl bg-surface-container-low">
+  <input type="hidden" name="alimento_id" value="{{.AlimentoID}}">
+  <span class="flex-1 min-w-0 text-sm font-semibold truncate">{{.AlimentoNome}}</span>
+  <input name="gramas" inputmode="decimal" required value="{{if .Gramas}}{{campo .Gramas}}{{end}}" placeholder="0" aria-label="Gramas de {{.AlimentoNome}}"
+    class="w-20 text-right font-bold bg-card rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary">
+  <span class="text-xs text-on-surface-variant">g</span>
+  <button type="button" onclick="this.closest('li').remove()" aria-label="Tirar {{.AlimentoNome}}"
+    class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container">
+    <span class="icone text-[18px]">close</span>
+  </button>
+</li>
+{{end}}
+
+{{define "ingredientes-busca"}}
+{{if .Busca}}
+  {{if .Resultados}}
+  <ul class="space-y-1.5">
+    {{range .Resultados}}
+    <li>
+      <button type="button" hx-get="/ingredientes/{{.ID}}" hx-target="#ingredientes" hx-swap="beforeend"
+        hx-on::after-request="document.getElementById('busca-resultados').innerHTML = ''; const q = document.querySelector('[form=busca-ingrediente]'); q.value = ''; document.querySelector('#ingredientes li:last-child input[name=gramas]')?.focus()"
+        class="w-full flex items-center gap-3 rounded-2xl px-3 py-2 text-left hover:bg-surface-container-low">
+        <span class="flex-1 min-w-0">
+          <span class="block text-sm font-semibold truncate">{{.Nome}}</span>
+          <span class="block text-xs text-on-surface-variant">{{num .Kcal}} kcal / 100 g{{if ne .Fonte "taco"}} · {{if eq .Fonte "receita"}}receita{{else}}meu{{end}}{{end}}</span>
+        </span>
+        <span class="icone text-primary">add</span>
+      </button>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="text-center text-sm text-on-surface-variant py-3">Nada encontrado para “{{.Busca}}”.</p>
+  {{end}}
+{{end}}
+{{end}}

@@ -241,3 +241,132 @@ func (r *Repo) MarcarDesfeita(ctx context.Context, id int64) error {
 	_, err := r.q.ExecContext(ctx, `UPDATE auditoria SET desfeito = 1 WHERE id = ?`, id)
 	return err
 }
+
+// InserirAlimento grava um alimento do usuário ou de receita e devolve o id.
+func (r *Repo) InserirAlimento(ctx context.Context, a Alimento) (int64, error) {
+	var id int64
+	err := r.q.QueryRowContext(ctx, `INSERT INTO alimentos
+		(nome, nome_busca, categoria, fonte, kcal, prot, carb, gord, fibra)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		a.Nome, Normalizar(a.Nome), a.Categoria, a.Fonte, a.Kcal, a.Prot, a.Carb, a.Gord, a.Fibra,
+	).Scan(&id)
+	return id, err
+}
+
+// AtualizarAlimento grava nome e valores por 100 g.
+func (r *Repo) AtualizarAlimento(ctx context.Context, a Alimento) error {
+	_, err := r.q.ExecContext(ctx, `UPDATE alimentos SET nome = ?, nome_busca = ?, categoria = ?,
+		kcal = ?, prot = ?, carb = ?, gord = ?, fibra = ? WHERE id = ?`,
+		a.Nome, Normalizar(a.Nome), a.Categoria, a.Kcal, a.Prot, a.Carb, a.Gord, a.Fibra, a.ID)
+	return err
+}
+
+// AlimentoPorNome procura um alimento da fonte com o mesmo nome (ignorando acentos e maiúsculas).
+func (r *Repo) AlimentoPorNome(ctx context.Context, fonte, nome string) (Alimento, error) {
+	a, err := scanAlimento(r.q.QueryRowContext(ctx, `SELECT `+colsAlimento+` FROM alimentos
+		WHERE fonte = ? AND nome_busca = ? LIMIT 1`, fonte, Normalizar(nome)))
+	return a, achar(err)
+}
+
+// RemoverPorcao apaga a porção com esse nome, se existir.
+func (r *Repo) RemoverPorcao(ctx context.Context, alimentoID int64, nome string) error {
+	_, err := r.q.ExecContext(ctx, `DELETE FROM porcoes WHERE alimento_id = ? AND nome = ?`, alimentoID, nome)
+	return err
+}
+
+// Receita é o alimento composto com o rendimento e a divisão em porções.
+type Receita struct {
+	Alimento
+	RendimentoG float64
+	NPorcoes    int
+	NomePorcao  string
+	CriadoEm    string
+	EditadoEm   string
+}
+
+// ItemReceita é um ingrediente com a quantidade usada na panela.
+type ItemReceita struct {
+	AlimentoID   int64
+	AlimentoNome string
+	Gramas       float64
+}
+
+const colsReceita = `a.id, a.nome, a.categoria, a.fonte, a.kcal, a.prot, a.carb, a.gord, a.fibra,
+	r.rendimento_g, r.n_porcoes, r.nome_porcao, r.criado_em, r.editado_em`
+
+func scanReceita(sc interface{ Scan(...any) error }) (Receita, error) {
+	var x Receita
+	a := &x.Alimento
+	err := sc.Scan(&a.ID, &a.Nome, &a.Categoria, &a.Fonte, &a.Kcal, &a.Prot, &a.Carb, &a.Gord, &a.Fibra,
+		&x.RendimentoG, &x.NPorcoes, &x.NomePorcao, &x.CriadoEm, &x.EditadoEm)
+	return x, err
+}
+
+// SalvarReceita cria ou atualiza os dados da receita (o alimento já existe).
+func (r *Repo) SalvarReceita(ctx context.Context, x Receita) error {
+	_, err := r.q.ExecContext(ctx, `INSERT INTO receitas
+		(alimento_id, rendimento_g, n_porcoes, nome_porcao, criado_em, editado_em) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (alimento_id) DO UPDATE SET rendimento_g = excluded.rendimento_g,
+		n_porcoes = excluded.n_porcoes, nome_porcao = excluded.nome_porcao, editado_em = excluded.editado_em`,
+		x.ID, x.RendimentoG, x.NPorcoes, x.NomePorcao, x.CriadoEm, x.EditadoEm)
+	return err
+}
+
+// TrocarItensReceita substitui todos os ingredientes.
+func (r *Repo) TrocarItensReceita(ctx context.Context, receitaID int64, itens []ItemReceita) error {
+	if _, err := r.q.ExecContext(ctx, `DELETE FROM receita_itens WHERE receita_id = ?`, receitaID); err != nil {
+		return err
+	}
+	for _, it := range itens {
+		if _, err := r.q.ExecContext(ctx, `INSERT INTO receita_itens (receita_id, alimento_id, gramas) VALUES (?, ?, ?)`,
+			receitaID, it.AlimentoID, it.Gramas); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Receita busca uma receita pelo id do alimento.
+func (r *Repo) Receita(ctx context.Context, id int64) (Receita, error) {
+	x, err := scanReceita(r.q.QueryRowContext(ctx, `SELECT `+colsReceita+`
+		FROM receitas r JOIN alimentos a ON a.id = r.alimento_id WHERE r.alimento_id = ?`, id))
+	return x, achar(err)
+}
+
+// Receitas lista as receitas, das editadas mais recentemente para as mais antigas.
+func (r *Repo) Receitas(ctx context.Context) ([]Receita, error) {
+	rows, err := r.q.QueryContext(ctx, `SELECT `+colsReceita+`
+		FROM receitas r JOIN alimentos a ON a.id = r.alimento_id ORDER BY r.editado_em DESC, a.nome`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Receita
+	for rows.Next() {
+		x, err := scanReceita(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+// ItensReceita lista os ingredientes na ordem em que foram informados.
+func (r *Repo) ItensReceita(ctx context.Context, receitaID int64) ([]ItemReceita, error) {
+	rows, err := r.q.QueryContext(ctx, `SELECT i.alimento_id, a.nome, i.gramas
+		FROM receita_itens i JOIN alimentos a ON a.id = i.alimento_id WHERE i.receita_id = ? ORDER BY i.id`, receitaID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []ItemReceita
+	for rows.Next() {
+		var it ItemReceita
+		if err := rows.Scan(&it.AlimentoID, &it.AlimentoNome, &it.Gramas); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}

@@ -100,3 +100,13 @@
   summary::-webkit-details-marker { display: none; }
   summary { list-style: none; }
 }
+
+/* Cartões de receita abrem com <details>; sem o triângulo padrão. */
+summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Fileiras de botões que rolam de lado (atalhos, refeições, porções): sem barra visível. */
+.overflow-x-auto {
+  scrollbar-width: none;
+}

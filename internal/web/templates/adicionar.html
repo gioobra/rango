@@ -48,7 +48,7 @@
         <div class="flex-1 min-w-0">
           <p class="text-sm font-semibold">{{.Nome}}
             {{if eq .Fonte "taco"}}<span class="ml-1 px-1.5 rounded-md bg-secondary-container text-on-secondary-container text-[10px] font-bold align-middle">TACO</span>
-            {{else}}<span class="ml-1 px-1.5 rounded-md bg-tertiary-container/20 text-tertiary text-[10px] font-bold align-middle">Meu</span>{{end}}
+            {{else}}<span class="ml-1 px-1.5 rounded-md bg-tertiary-container/20 text-tertiary text-[10px] font-bold align-middle">{{if eq .Fonte "receita"}}Receita{{else}}Meu{{end}}</span>{{end}}
           </p>
           <p class="text-xs text-on-surface-variant">{{num .Kcal}} kcal / 100 g · P {{dec .Prot}} · C {{dec .Carb}} · G {{dec .Gord}}</p>
         </div>

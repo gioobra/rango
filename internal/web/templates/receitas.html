@@ -1,0 +1,78 @@
+{{define "conteudo"}}
+{{template "topo"}}
+<main class="max-w-xl mx-auto px-5 pb-32 space-y-4">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-xl font-bold">Caderno de receitas</h1>
+      <p class="text-xs text-on-surface-variant">{{len .Receitas}} {{if eq (len .Receitas) 1}}receita salva{{else}}receitas salvas{{end}}</p>
+    </div>
+    <a href="/receitas/nova" class="flex items-center gap-1 px-4 py-2 rounded-full bg-primary text-on-primary text-sm font-bold shadow-sm">
+      <span class="icone text-[18px]">add</span>Nova receita
+    </a>
+  </div>
+
+  {{if not .Receitas}}
+  <section class="bg-card rounded-3xl p-8 shadow-sm text-center space-y-3">
+    <img src="/static/nutri.png" alt="" class="w-16 h-16 mx-auto">
+    <p class="text-on-surface-variant text-sm">Cadastre a panela da semana uma vez e registre cada marmita com um toque. Também dá para pedir ao Nutri: “fiz 4 marmitas com 500 g de frango e 600 g de batata”.</p>
+  </section>
+  {{end}}
+
+  {{$aberta := .Aberta}}{{$ref := .Refeicao}}{{$refs := .Refeicoes}}{{$hoje := .Hoje}}
+  {{range .Receitas}}
+  <details id="receita-{{.ID}}" class="group bg-card rounded-3xl shadow-sm overflow-hidden scroll-mt-20" {{if eq .ID $aberta}}open{{end}}>
+    <summary class="list-none cursor-pointer p-4 flex items-center gap-3">
+      <span class="w-11 h-11 shrink-0 rounded-2xl bg-secondary-container/50 text-on-secondary-container flex items-center justify-center">
+        <span class="icone">menu_book</span>
+      </span>
+      <div class="flex-1 min-w-0">
+        <h2 class="font-semibold leading-tight truncate">{{.Nome}}</h2>
+        <p class="text-xs text-on-surface-variant">{{.NPorcoes}} × {{.NomePorcao}} · {{dec .PorcaoG}} g · <span class="font-bold text-primary">{{num .MacrosPorcao.Kcal}} kcal</span></p>
+        <p class="text-[11px] text-on-surface-variant mt-0.5">P {{dec .MacrosPorcao.Prot}} g · C {{dec .MacrosPorcao.Carb}} g · G {{dec .MacrosPorcao.Gord}} g</p>
+      </div>
+      <span class="icone text-on-surface-variant transition-transform group-open:rotate-90">chevron_right</span>
+    </summary>
+
+    <div class="px-4 pb-4 space-y-4">
+      <div>
+        <p class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant mb-2">Ingredientes da panela · {{len .Itens}}</p>
+        <ul class="space-y-1.5">
+          {{range .Itens}}
+          <li class="flex items-center justify-between gap-3 px-3 py-2 rounded-xl bg-surface-container-low text-sm">
+            <span class="truncate">{{.AlimentoNome}}</span>
+            <span class="shrink-0 font-semibold">{{dec .Gramas}} g</span>
+          </li>
+          {{end}}
+        </ul>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div class="rounded-2xl bg-surface-container-low px-3 py-2">
+          <p class="text-[10px] font-bold uppercase text-on-surface-variant">Peso pronto</p>
+          <p class="text-lg font-extrabold">{{num .RendimentoG}} <span class="text-xs font-semibold text-on-surface-variant">g</span></p>
+        </div>
+        <div class="rounded-2xl bg-surface-container-low px-3 py-2">
+          <p class="text-[10px] font-bold uppercase text-on-surface-variant">Panela inteira</p>
+          <p class="text-lg font-extrabold">{{num .Total.Kcal}} <span class="text-xs font-semibold text-on-surface-variant">kcal</span></p>
+        </div>
+      </div>
+
+      <form method="post" action="/lancamentos" class="space-y-2">
+        <input type="hidden" name="alimento_id" value="{{.ID}}">
+        <input type="hidden" name="gramas" value="{{.PorcaoG}}">
+        <input type="hidden" name="data" value="{{iso $hoje}}">
+        <div class="flex gap-2">
+          <select name="refeicao" aria-label="Refeição" class="h-12 px-3 rounded-full bg-surface-container text-sm font-semibold focus:outline-none">
+            {{range $refs}}<option value="{{.Chave}}" {{if eq .Chave $ref}}selected{{end}}>{{.Nome}}</option>{{end}}
+          </select>
+          <button class="flex-1 h-12 flex items-center justify-center gap-1.5 rounded-full bg-primary text-on-primary text-sm font-bold shadow-sm active:scale-95">
+            <span class="icone text-[18px]">restaurant</span>Registrar {{.NomePorcao}}
+          </button>
+        </div>
+      </form>
+      <a href="/receitas/{{.ID}}/editar" class="block text-center text-sm font-bold text-primary py-1">Editar receita</a>
+    </div>
+  </details>
+  {{end}}
+</main>
+{{end}}

@@ -31,6 +31,10 @@ func Novo(svc *core.Servico, versao string, somenteLeitura bool) *sdk.Server {
 	sdk.AddTool(s, &sdk.Tool{Name: "resumo_dia", Annotations: leitura,
 		Description: "Diário de um dia: lançamentos (com id) por refeição, totais, meta e quanto falta."},
 		f.resumoDia)
+	sdk.AddTool(s, &sdk.Tool{Name: "listar_receitas", Annotations: leitura,
+		Description: "Receitas e marmitas salvas, com ingredientes, rendimento, porção e macros da porção. " +
+			"Para registrar, use o id da receita como alimento_id em registrar_refeicao."},
+		f.listarReceitas)
 	sdk.AddTool(s, &sdk.Tool{Name: "metas", Annotations: leitura,
 		Description: "Meta diária vigente na data (kcal e gramas de proteína, carboidrato e gordura)."},
 		f.metas)
@@ -60,6 +64,19 @@ func Novo(svc *core.Servico, versao string, somenteLeitura bool) *sdk.Server {
 	sdk.AddTool(s, &sdk.Tool{Name: "definir_metas", Annotations: destrutiva,
 		Description: "Define a meta diária, valendo a partir de hoje."},
 		f.definirMetas)
+	sdk.AddTool(s, &sdk.Tool{Name: "criar_receita", Annotations: aditiva,
+		Description: "Salva uma receita ou marmita: ingredientes (ids de buscar_alimento, em gramas crus como foram " +
+			"para a panela), peso pronto se a pessoa pesou e em quantas porções rendeu. Vira um alimento buscável, " +
+			"com a porção salva (\"1 marmita\" = peso ÷ porções)."},
+		f.criarReceita)
+	sdk.AddTool(s, &sdk.Tool{Name: "editar_receita", Annotations: destrutiva,
+		Description: "Substitui ingredientes, peso pronto e porções de uma receita. Mande a receita inteira, " +
+			"não só o que mudou. Lançamentos já feitos não mudam."},
+		f.editarReceita)
+	sdk.AddTool(s, &sdk.Tool{Name: "criar_alimento", Annotations: aditiva,
+		Description: "Cadastra um alimento que não existe na TACO, com valores por 100 g (de um rótulo, por exemplo). " +
+			"Se o rótulo dá os valores por porção, converta para 100 g antes."},
+		f.criarAlimento)
 	return s
 }
 
@@ -312,4 +329,109 @@ func traduzir(err error) error {
 		return errors.New("não encontrado: confira o id com resumo_dia ou buscar_alimento")
 	}
 	return err
+}
+
+// --- receitas e alimentos do usuário ---
+
+type ingrediente struct {
+	AlimentoID int64   `json:"alimento_id"`
+	Nome       string  `json:"nome,omitempty"`
+	Gramas     float64 `json:"gramas"`
+	Kcal       float64 `json:"kcal,omitempty"`
+}
+
+// Receita como o agente vê.
+type Receita struct {
+	ID           int64         `json:"id"`
+	Nome         string        `json:"nome"`
+	Ingredientes []ingrediente `json:"ingredientes"`
+	RendimentoG  float64       `json:"rendimento_g"`
+	PesoPronto   bool          `json:"peso_pronto_informado" jsonschema:"falso se o rendimento é só a soma dos ingredientes"`
+	NPorcoes     int           `json:"n_porcoes"`
+	Porcao       store.Porcao  `json:"porcao"`
+	PorPorcao    Nutrientes    `json:"por_porcao"`
+	Por100g      Nutrientes    `json:"por_100g"`
+}
+
+func deReceita(rc core.Receita) Receita {
+	out := Receita{ID: rc.ID, Nome: rc.Nome, RendimentoG: rc.RendimentoG, PesoPronto: rc.PesoInformado, NPorcoes: rc.NPorcoes,
+		Porcao:    store.Porcao{AlimentoID: rc.ID, Nome: rc.NomePorcao, Gramas: rc.PorcaoG},
+		PorPorcao: deMacros(rc.MacrosPorcao),
+		Por100g:   Nutrientes{Kcal: rc.Kcal, Prot: rc.Prot, Carb: rc.Carb, Gord: rc.Gord, Fibra: rc.Fibra},
+	}
+	for _, it := range rc.Itens {
+		out.Ingredientes = append(out.Ingredientes, ingrediente{AlimentoID: it.AlimentoID, Nome: it.AlimentoNome,
+			Gramas: it.Gramas, Kcal: it.Macros.Kcal})
+	}
+	return out
+}
+
+func deMacros(m core.Macros) Nutrientes {
+	return Nutrientes{Kcal: m.Kcal, Prot: m.Prot, Carb: m.Carb, Gord: m.Gord, Fibra: m.Fibra}
+}
+
+type saidaReceitas struct {
+	Receitas []Receita `json:"receitas"`
+}
+
+func (f *ferramentas) listarReceitas(ctx context.Context, _ *sdk.CallToolRequest, _ struct{}) (*sdk.CallToolResult, saidaReceitas, error) {
+	rcs, err := f.svc.Receitas(ctx)
+	out := saidaReceitas{Receitas: []Receita{}}
+	for _, rc := range rcs {
+		out.Receitas = append(out.Receitas, deReceita(rc))
+	}
+	return nil, out, err
+}
+
+type entradaReceita struct {
+	Nome         string        `json:"nome" jsonschema:"nome da receita, por exemplo: Marmita de frango com batata"`
+	Ingredientes []ingrediente `json:"ingredientes" jsonschema:"alimento_id e gramas de cada ingrediente; nome e kcal são ignorados"`
+	RendimentoG  float64       `json:"rendimento_g,omitempty" jsonschema:"peso pronto da panela; sem ele, vale a soma dos ingredientes"`
+	NPorcoes     int           `json:"n_porcoes,omitempty" jsonschema:"em quantas porções rendeu (padrão 1)"`
+	NomePorcao   string        `json:"nome_porcao,omitempty" jsonschema:"nome da porção, por exemplo: 1 marmita (padrão: 1 porção)"`
+}
+
+func (e entradaReceita) nova() core.NovaReceita {
+	n := core.NovaReceita{Nome: e.Nome, RendimentoG: e.RendimentoG, NPorcoes: e.NPorcoes, NomePorcao: e.NomePorcao}
+	for _, it := range e.Ingredientes {
+		n.Itens = append(n.Itens, store.ItemReceita{AlimentoID: it.AlimentoID, Gramas: it.Gramas})
+	}
+	return n
+}
+
+func (f *ferramentas) criarReceita(ctx context.Context, _ *sdk.CallToolRequest, in entradaReceita) (*sdk.CallToolResult, Receita, error) {
+	rc, err := f.svc.CriarReceita(ctx, in.nova())
+	if err != nil {
+		return nil, Receita{}, traduzir(err)
+	}
+	return nil, deReceita(rc), nil
+}
+
+type entradaEdicaoReceita struct {
+	ID int64 `json:"id" jsonschema:"id da receita (veja listar_receitas)"`
+	entradaReceita
+}
+
+func (f *ferramentas) editarReceita(ctx context.Context, _ *sdk.CallToolRequest, in entradaEdicaoReceita) (*sdk.CallToolResult, Receita, error) {
+	rc, err := f.svc.EditarReceita(ctx, in.ID, in.nova())
+	if err != nil {
+		return nil, Receita{}, traduzir(err)
+	}
+	return nil, deReceita(rc), nil
+}
+
+type entradaAlimento struct {
+	Nome      string     `json:"nome"`
+	Categoria string     `json:"categoria,omitempty"`
+	Por100g   Nutrientes `json:"por_100g" jsonschema:"valores por 100 g"`
+}
+
+func (f *ferramentas) criarAlimento(ctx context.Context, _ *sdk.CallToolRequest, in entradaAlimento) (*sdk.CallToolResult, Alimento, error) {
+	a, err := f.svc.CriarAlimento(ctx, core.NovoAlimento{Nome: in.Nome, Categoria: in.Categoria,
+		Por100g: core.Macros{Kcal: in.Por100g.Kcal, Prot: in.Por100g.Prot, Carb: in.Por100g.Carb, Gord: in.Por100g.Gord, Fibra: in.Por100g.Fibra}})
+	if err != nil {
+		return nil, Alimento{}, err
+	}
+	return nil, Alimento{ID: a.ID, Nome: a.Nome, Categoria: a.Categoria, Fonte: a.Fonte,
+		Por100g: Nutrientes{Kcal: a.Kcal, Prot: a.Prot, Carb: a.Carb, Gord: a.Gord, Fibra: a.Fibra}}, nil
 }

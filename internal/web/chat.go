@@ -30,13 +30,14 @@ type Mensagem struct {
 // Cartao mostra o que o Nutri mudou no diário.
 type Cartao struct {
 	N           int
-	Acao        string // registrar | editar | remover | desfazer
+	Acao        string // registrar | editar | remover | desfazer | receita
 	Refeicao    string
 	Data        string
 	Lancamentos []store.Lancamento
 	Total       float64
 	Dia         core.Dia
 	Desfeito    bool
+	Receita     *core.Receita // em Acao "receita"
 }
 
 // conversa é o chat em andamento. Fica na memória: reiniciar o servidor limpa a tela,
@@ -98,6 +99,10 @@ var avisoFerramenta = map[string]string{
 	"metas":              "Olhando as metas…",
 	"definir_porcao":     "Salvando a porção…",
 	"definir_metas":      "Salvando as metas…",
+	"listar_receitas":    "Olhando as receitas…",
+	"criar_receita":      "Salvando a receita…",
+	"editar_receita":     "Atualizando a receita…",
+	"criar_alimento":     "Cadastrando o alimento…",
 }
 
 func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
@@ -207,9 +212,17 @@ func (s *Servidor) novoCartao(ferramenta, saida string) (int, bool) {
 	var out struct {
 		Lancamentos []store.Lancamento `json:"lancamentos"`
 		Lancamento  *store.Lancamento  `json:"lancamento"`
+		ID          int64              `json:"id"`
 	}
 	if json.Unmarshal([]byte(saida), &out) != nil {
 		return 0, false
+	}
+	if ferramenta == "criar_receita" || ferramenta == "editar_receita" {
+		rc, err := s.svc.Receita(context.Background(), out.ID)
+		if err != nil {
+			return 0, false
+		}
+		return s.guardarCartao(&Cartao{Acao: "receita", Receita: &rc}), true
 	}
 	acao := map[string]string{
 		"registrar_refeicao": "registrar", "editar_lancamento": "editar",
@@ -230,12 +243,17 @@ func (s *Servidor) novoCartao(ferramenta, saida string) (int, bool) {
 		k.Total += l.Kcal
 	}
 	k.Dia = s.diaDoCartao(context.Background(), k.Data)
+	return s.guardarCartao(k), true
+}
+
+// guardarCartao numera o cartão e o guarda na conversa.
+func (s *Servidor) guardarCartao(k *Cartao) int {
 	c := s.conversa
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	k.N = len(c.cartoes)
 	c.cartoes = append(c.cartoes, k)
-	return k.N, true
+	return k.N
 }
 
 // cartao devolve uma cópia do cartão n.

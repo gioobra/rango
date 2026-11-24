@@ -79,6 +79,7 @@ func (s *Servidor) carregarTemplates() error {
 		"rotuloData": rotuloData,
 		"iso":        func(t time.Time) string { return t.Format(core.FormatoData) },
 		"hora":       func(t time.Time) string { return t.Format("15:04") },
+		"campo":      campo,
 		"dataDe": func(v string) time.Time {
 			t, _ := time.ParseInLocation(core.FormatoData, v, time.Local)
 			return t
@@ -164,7 +165,14 @@ func (s *Servidor) Handler() http.Handler {
 	m.HandleFunc("GET /chat/turnos/{n}", s.eventos)
 	m.HandleFunc("POST /chat/cartoes/{n}/desfazer", s.desfazerCartao)
 	m.HandleFunc("POST /chat/nova", s.novaConversa)
-	for _, aba := range []string{"receitas", "resumo"} {
+	m.HandleFunc("GET /receitas", s.receitas)
+	m.HandleFunc("GET /receitas/nova", s.novaReceita)
+	m.HandleFunc("POST /receitas", s.salvarReceita)
+	m.HandleFunc("GET /receitas/{id}/editar", s.editarReceita)
+	m.HandleFunc("POST /receitas/{id}", s.salvarReceita)
+	m.HandleFunc("GET /ingredientes", s.buscaIngrediente)
+	m.HandleFunc("GET /ingredientes/{id}", s.ingrediente)
+	for _, aba := range []string{"resumo"} {
 		m.HandleFunc("GET /"+aba, s.emBreve(aba))
 	}
 	return s.exigirLogin(cabecalhos(m))
@@ -242,6 +250,11 @@ func dec(v float64) string {
 		return num(v)
 	}
 	return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1)
+}
+
+// campo formata para um input de texto: sem separador de milhar e com vírgula, 1100.5 -> "1100,5".
+func campo(v float64) string {
+	return strings.Replace(strconv.FormatFloat(math.Round(v*10)/10, 'f', -1, 64), ".", ",", 1)
 }
 
 // pct devolve a fração em porcentagem, limitada a 0..100.

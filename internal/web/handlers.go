@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -38,8 +39,16 @@ func lerRefeicao(v string) string {
 	return "jantar"
 }
 
+// milhar reconhece "1.100" e "12.500.000": ponto só como separador de milhar.
+var milhar = regexp.MustCompile(`^\d{1,3}(\.\d{3})+$`)
+
+// lerNumero aceita o formato brasileiro ("1.100", "4,5", "1.100,5") e o do campo number ("4.5").
 func lerNumero(v string) (float64, error) {
-	return strconv.ParseFloat(strings.Replace(strings.TrimSpace(v), ",", ".", 1), 64)
+	v = strings.TrimSpace(v)
+	if strings.Contains(v, ",") || milhar.MatchString(v) {
+		v = strings.ReplaceAll(v, ".", "")
+	}
+	return strconv.ParseFloat(strings.Replace(v, ",", ".", 1), 64)
 }
 
 func paraDiario(data, aviso string) string {
@@ -252,8 +261,7 @@ func (s *Servidor) salvarMetas(w http.ResponseWriter, r *http.Request) {
 
 func (s *Servidor) emBreve(aba string) http.HandlerFunc {
 	nomes := map[string][2]string{
-		"receitas": {"Receitas", "Receitas e marmitas chegam na fase 3."},
-		"resumo":   {"Resumo", "Histórico e revisão semanal chegam na fase 4."},
+		"resumo": {"Resumo", "Histórico e revisão semanal chegam na fase 4."},
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusOK, "embreve", "pagina", map[string]any{
