@@ -107,8 +107,8 @@ rango/
 alimentos       id, nome, nome_busca, categoria, fonte (taco|usuario|receita), taco_id,
                 kcal, prot, carb, gord, fibra                  -- por 100g
 porcoes         id, alimento_id, nome ("1 concha"), gramas
-receitas        alimento_id, rendimento_g, n_porcoes           -- fase 3
-receita_itens   receita_id, alimento_id, gramas                -- fase 3
+receitas        alimento_id, rendimento_g, n_porcoes, nome_porcao, criado_em, editado_em
+receita_itens   id, receita_id, alimento_id, gramas            -- gramas crus, como foram para a panela
 lancamentos     id, data, refeicao (cafe|almoco|lanche|jantar), alimento_id, gramas,
                 kcal, prot, carb, gord,                        -- congelados no momento do registro
                 origem (manual|agente), estimado, criado_em, removido_em
@@ -118,6 +118,9 @@ peso            data, kg                                       -- fase 4
 ```
 
 - Os macros ficam **congelados no lançamento**, então editar uma receita não altera o histórico.
+- **Receita é um alimento** (`fonte = 'receita'`): os valores por 100 g saem da soma dos ingredientes ÷ peso pronto. Assim ela entra na busca, no registro e nas porções sem caminho especial. Ao salvar, cria a porção `nome_porcao` ("1 marmita") = peso pronto ÷ `n_porcoes`; editar troca essa porção e mantém as que o usuário criou.
+- **Peso pronto** é opcional: sem ele, vale a soma dos ingredientes crus. Não há coluna para "informado"; quando o rendimento é igual à soma, a edição mostra o campo vazio e a soma é refeita se os ingredientes mudarem.
+- **Alimentos do usuário** (`fonte = 'usuario'`) entram por `criar_alimento`, com valores por 100 g de um rótulo. Nomes não repetem dentro da mesma fonte.
 - As **porções caseiras** são do usuário ("minha concha = 90g"), e o Nutri passa a usá-las.
 - A **auditoria** guarda o antes e o depois (o lançamento em JSON), o que viabiliza o desfazer e mostra o que o agente mexeu.
 - **Remoção lógica** (`removido_em`): remover não apaga a linha, então o desfazer só restaura o estado anterior. O desfazer é uma pilha global: reverte a mudança mais recente ainda não desfeita, de qualquer origem.
@@ -132,10 +135,11 @@ Conjunto pequeno e bem escolhido (lição do Karakeep), com a escrita sob contro
 | Fase | Ferramentas |
 |---|---|
 | 2 | `buscar_alimento`, `registrar_refeicao` (vários itens), `editar_lancamento`, `remover_lancamento`, `desfazer`, `resumo_dia`, `definir_porcao`, `metas`, `definir_metas` |
-| 3 | `criar_receita`, `listar_receitas` |
+| 3 | `criar_receita`, `editar_receita`, `listar_receitas`, `criar_alimento` |
 | 4 | `historico(periodo)`, `registrar_peso` + prompts `revisao_semanal`, `sugerir_refeicao` |
 
-- A flag `--read-only` expõe só as ferramentas de leitura (`buscar_alimento`, `resumo_dia`, `metas`).
+- A flag `--read-only` expõe só as ferramentas de leitura (`buscar_alimento`, `resumo_dia`, `metas`, `listar_receitas`).
+- `editar_receita` entrou porque a marmita se repete com outras quantidades, e `criar_alimento` resolve os produtos fora da TACO. `editar_receita` recebe a receita inteira, para não ter regras de mescla.
 - As saídas são JSON estruturado. `buscar_alimento` já traz as porções salvas, e `registrar_refeicao` devolve os lançamentos e o resumo do dia, para o Nutri responder sem outra chamada.
 - Datas em `AAAA-MM-DD`; sem data, vale hoje.
 - Os atalhos da web ("Resumo de hoje", "O que janto?", "Desfazer último") hoje só mandam texto pronto. Quando os prompts da fase 4 existirem, "Resumo da semana" e "O que janto?" passam a usá-los.
@@ -154,7 +158,12 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - O streaming usa `EventSource` num `chat.js` pequeno, em vez da extensão SSE do htmx: menos um arquivo de terceiros e controle do reenvio.
 - Resultados de `registrar_refeicao`, `editar_lancamento`, `remover_lancamento` e `desfazer` viram cartões. O "Desfazer" do cartão de registro remove a refeição inteira (`RemoverVarios`), e cada remoção entra na pilha do desfazer.
 - A conversa (sessão do claude, mensagens e cartões) fica na memória do servidor. Reiniciar limpa a tela, e "Nova" começa outra sessão.
+- `criar_receita` e `editar_receita` viram o cartão "Receita salva", com link para a receita.
 - Ícones: o subconjunto do Material Symbols só tem os glifos em uso, então o botão de enviar é o `arrow_back` girado.
+
+### Receitas na web
+- Lista em `<details>` (sem JS): ingredientes, peso pronto, panela inteira e "Registrar 1 marmita", que usa o mesmo `POST /lancamentos` do diário.
+- Formulário de receita com busca de ingrediente pelo htmx (`/ingredientes`). Números em campos de texto aceitam o formato brasileiro ("1.100" é mil e cem, "4,5") e são mostrados sem separador de milhar.
 
 ## 8. Segurança
 
@@ -170,14 +179,17 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - [x] **0. Design**: telas no Stitch (diário do dia, chat, adicionar alimento, receitas, resumo), pensadas primeiro pro celular
 - [x] **1. Núcleo**: estrutura do projeto, schema e migrations, seed da TACO, diário e metas na web, PWA, senha
 - [x] **2. Nutri**: `rango mcp` (stdio), chat via `claude -p` com streaming, cartões de lançamento com desfazer
-- [ ] **3. Receitas e marmitas**: alimento composto, rendimento, porções
+- [x] **3. Receitas e marmitas**: alimento composto, rendimento, porções
 - [ ] **4. Planejar e analisar**: histórico, peso, revisão semanal, sugestões
 
 ## 10. Em aberto
 
-- Leite de vaca, iogurte de abacaxi e coco verde não vieram da TACO (sem kcal na tabela). Cadastrar como alimento do usuário quando houver cadastro (fase 3), ou buscar outra fonte.
+- Leite de vaca, iogurte de abacaxi e coco verde não vieram da TACO (sem kcal na tabela). Já dá para cadastrar com `criar_alimento` pelo Nutri; falta decidir se vêm prontos no seed, de outra fonte.
+- Cadastro de alimento do usuário pela web (hoje só pelo Nutri).
+- Excluir ou arquivar receitas. Uma receita usada em lançamentos não pode sumir do banco.
+- Na busca para ingredientes, o cru costuma ser o certo, mas a ordem geral põe o cru por último.
 - Subcomando `import` (previsto em `cmd/rango`): definir o que importa (alimentos próprios? backup?) antes de implementar.
-- Fotos (de prato e de rótulo): avaliar agora que a fase 2 terminou.
+- Fotos (de prato e de rótulo): avaliar. O rótulo combinaria com `criar_alimento`.
 - Guardar o histórico do chat no banco, para sobreviver a reinícios do servidor (hoje fica na memória).
 - Regerar o subconjunto do Material Symbols com `send` e outros ícones; falta a fonte completa no repositório ou um passo no `make`.
 - Um cartão de registro continua com "Desfazer" mesmo se o Nutri já desfez aquele registro. Clicar não estraga nada, mas confunde.

@@ -4,7 +4,7 @@ Diário alimentar local, leve e em português, com um agente (**Nutri**) que reg
 
 O Rango é um binário Go único que roda no seu PC. Você acessa pelo celular através da Tailscale. O Nutri é o Claude Code em modo headless, conversando com o Rango via MCP.
 
-O que já funciona (fases 1 e 2): diário do dia com metas, busca nos alimentos da TACO, porções caseiras, remoção com desfazer, tema claro e escuro, PWA e senha, e o chat com o Nutri, que registra e corrige por texto. Receitas chegam na fase 3. O plano e as decisões estão em [`PLANO.md`](PLANO.md).
+O que já funciona (fases 1 a 3): diário do dia com metas, busca nos alimentos da TACO, porções caseiras, remoção com desfazer, tema claro e escuro, PWA e senha, o chat com o Nutri, que registra e corrige por texto, e receitas e marmitas. Histórico e revisão semanal chegam na fase 4. O plano e as decisões estão em [`PLANO.md`](PLANO.md).
 
 ## Requisitos
 
@@ -42,6 +42,8 @@ make build    # gera bin/rango
 ```
 
 Abra `http://127.0.0.1:8080`, entre com a senha, defina as metas no ícone do robô e comece a registrar, pela tela do diário ou pela aba Chat ("almocei um prato de arroz e uma concha de feijão"). Cada registro do Nutri aparece num cartão com botão de desfazer. O histórico do chat fica na memória e some quando o servidor reinicia.
+
+Na aba Receitas, cadastre a panela (ingredientes crus, peso pronto se pesou e em quantas porções rendeu) e registre cada marmita com um toque. Pelo chat também funciona: "fiz 4 marmitas com 500 g de frango e 600 g de batata" e, depois, "comi uma marmita". Produtos fora da TACO podem ser cadastrados pelo Nutri com os valores do rótulo.
 
 ### MCP em outros clientes
 
