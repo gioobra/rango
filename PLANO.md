@@ -55,7 +55,7 @@ Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`,
 - **Tema:** tokens no estilo Material 3, definidos em `design/stitch/*/DESIGN.md`. No claro, primária verde-folha `#006b2c`, superfície `#f8f9ff` e laranja `#994100` para estouro de meta. No escuro, superfície grafite `#111316`, primária `#4be277` e laranja `#ffb784`. O tema segue o sistema (`prefers-color-scheme`).
 - **Tipografia e ícones:** Plus Jakarta Sans e Material Symbols Outlined.
 - **Identidade:** o ícone do app é um robozinho nutricionista com uma folha, usado também como avatar do Nutri. O app não usa fotos de pessoas nem de comida.
-- **Ao adaptar na fase 1:** o HTML do Stitch puxa Tailwind via CDN, fontes do Google Fonts e imagens do `googleusercontent`. Tudo isso vira asset embutido: CSS pelo Tailwind CLI, fontes e ícone em `internal/web/static/`. O app não pode depender de rede externa.
+- **Adaptação para os templates:** o HTML do Stitch é só referência, porque puxa Tailwind por CDN, fontes do Google Fonts e imagens do `googleusercontent`. Os templates reescrevem as telas com os mesmos tokens, e tudo isso fica embutido no binário (ver Princípios na seção 4). O robô virou o ícone do PWA e o avatar (`nutri.png`); o logo do Stitch foi trocado pelo ícone `nutrition`.
 
 ## 4. Arquitetura e organização
 
@@ -73,7 +73,7 @@ Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`,
 rango/
 ├── .claude/              # CLAUDE.md (regras de trabalho) e skills/docs/
 ├── design/stitch/        # export bruto do Stitch (referência, não vai no binário)
-├── cmd/rango/            # main: subcomandos serve | mcp | import
+├── cmd/rango/            # main: subcomandos serve (fase 1) | mcp (fase 2) | import (em aberto)
 ├── internal/
 │   ├── core/             # domínio: alimentos, porções, lançamentos, receitas, metas, resumos
 │   ├── store/            # SQLite: repositórios, migrations/, seed/ (TACO)
