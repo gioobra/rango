@@ -49,6 +49,14 @@ Fora do escopo: exercícios e treinos.
 
 Referência de código: `grafana/mcp-grafana` (MCP oficial em Go).
 
+### Design (fase 0)
+Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`, com um `code.html` por tela, em versão clara e escura.
+- **Telas:** Diário do dia, Chat com o Nutri, Adicionar alimento, Receitas, Resumo. Navegação inferior com 4 abas (Diário, Chat, Receitas, Resumo). Adicionar alimento abre por cima e não tem a barra.
+- **Tema:** tokens no estilo Material 3, definidos em `design/stitch/*/DESIGN.md`. No claro, primária verde-folha `#006b2c`, superfície `#f8f9ff` e laranja `#994100` para estouro de meta. No escuro, superfície grafite `#111316`, primária `#4be277` e laranja `#ffb784`. O tema segue o sistema (`prefers-color-scheme`).
+- **Tipografia e ícones:** Plus Jakarta Sans e Material Symbols Outlined.
+- **Identidade:** o ícone do app é um robozinho nutricionista com uma folha, usado também como avatar do Nutri. O app não usa fotos de pessoas nem de comida.
+- **Ao adaptar na fase 1:** o HTML do Stitch puxa Tailwind via CDN, fontes do Google Fonts e imagens do `googleusercontent`. Tudo isso vira asset embutido: CSS pelo Tailwind CLI, fontes e ícone em `internal/web/static/`. O app não pode depender de rede externa.
+
 ## 4. Arquitetura e organização
 
 ### Princípios
@@ -63,6 +71,7 @@ Referência de código: `grafana/mcp-grafana` (MCP oficial em Go).
 ```
 rango/
 ├── .claude/              # CLAUDE.md (regras de trabalho) e skills/docs/
+├── design/stitch/        # export bruto do Stitch (referência, não vai no binário)
 ├── cmd/rango/            # main: subcomandos serve | mcp | import
 ├── internal/
 │   ├── core/             # domínio: alimentos, porções, lançamentos, receitas, metas, resumos
@@ -80,7 +89,8 @@ rango/
 - **Documentação enxuta:** na raiz, só `README.md` (como instalar e usar) e este `PLANO.md`, que guarda as decisões. Nada de pasta `docs/` cheia de `.md`. Exceções:
   - `.claude/CLAUDE.md`: curto, importa este plano e lista as regras de trabalho pro Claude Code;
   - `.claude/skills/docs/`: a skill `/docs`, que sincroniza a documentação no fim de cada fase;
-  - o prompt do Nutri, em `internal/agent/`, embutido no binário.
+  - o prompt do Nutri, em `internal/agent/`, embutido no binário;
+  - os `DESIGN.md` do export do Stitch, em `design/stitch/`, mantidos como vieram.
 - **Poucos testes, nos pontos que importam.** É um projeto pequeno. Os testes ficam ao lado do código (`*_test.go`) e cobrem só o que é fácil errar sem perceber: cálculo de macros e porções, receitas (rendimento e macros por porção), desfazer e auditoria, e as migrations. Handlers, templates e código trivial não precisam de teste.
 - **Migrations numeradas** (`0001_inicial.sql`, ...), aplicadas automaticamente ao iniciar.
 - **Formatação e lint:** `gofmt` e `golangci-lint`, sem exceção.
@@ -139,7 +149,7 @@ O prompt fica embutido no binário e é passado ao `claude -p`. Regras base:
 
 ## 9. Fases
 
-- [ ] **0. Design**: telas no Stitch (diário do dia, chat, adicionar alimento, receitas, resumo), pensadas primeiro pro celular
+- [x] **0. Design**: telas no Stitch (diário do dia, chat, adicionar alimento, receitas, resumo), pensadas primeiro pro celular
 - [ ] **1. Núcleo**: estrutura do projeto, schema e migrations, seed da TACO, diário e metas na web, PWA, senha
 - [ ] **2. Nutri**: `rango mcp` (stdio), chat via `claude -p` com streaming, cartões de lançamento com desfazer
 - [ ] **3. Receitas e marmitas**: alimento composto, rendimento, porções
