@@ -63,7 +63,8 @@ Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`,
 - **Camadas com dependência em uma direção só:** `web` e `mcp` → `core` → `store`. O `core` não conhece HTTP, MCP nem SQL.
 - **Toda regra de negócio fica no `core`.** Handlers web e ferramentas MCP são finos: validam a entrada, chamam o `core` e formatam a saída.
 - **Um binário, vários subcomandos.** Nada de serviços separados.
-- **Assets embutidos** (`embed.FS`): templates, CSS, JS, migrations e seed da TACO. O binário é autossuficiente.
+- **Assets embutidos** (`embed.FS`): templates, CSS, JS, fontes, migrations e seed da TACO. O binário é autossuficiente e não busca nada na internet: htmx, Plus Jakarta Sans e o subconjunto do Material Symbols ficam em `internal/web/static/`.
+- **CSS gerado e versionado:** `internal/web/static/app.css` sai do Tailwind CLI (`make css`) e vai no git, para `go build` funcionar sem o Tailwind instalado. A entrada é `internal/web/tailwind.css`. O tema escuro troca as variáveis de cor via `prefers-color-scheme`, sem classes `dark:`.
 - **Dados fora do repositório**, seguindo XDG: banco em `~/.local/share/rango/rango.db`.
 - **Poucas dependências.** Cada dependência nova precisa de um motivo claro.
 
@@ -79,7 +80,8 @@ rango/
 │   ├── web/              # handlers, templates/, static/
 │   ├── mcp/              # ferramentas e prompts MCP → core
 │   └── agent/            # ponte com o claude -p, prompt do Nutri (embutido)
-├── go.mod
+├── go.mod, go.sum
+├── .gitignore            # .env e bin/
 ├── Makefile
 ├── README.md
 └── PLANO.md
@@ -101,21 +103,26 @@ rango/
 ## 5. Modelo de dados (rascunho)
 
 ```
-alimentos       id, nome, fonte (taco|usuario|receita), kcal, prot, carb, gord, fibra   -- por 100g
-porcoes         alimento_id, nome ("1 concha"), gramas
-receitas        alimento_id, rendimento_g, n_porcoes
-receita_itens   receita_id, alimento_id, gramas
-lancamentos     id, data, refeicao, alimento_id, gramas,
-                kcal, prot, carb, gord,          -- congelados no momento do registro
-                origem (manual|agente), estimado, criado_em
+alimentos       id, nome, nome_busca, categoria, fonte (taco|usuario|receita), taco_id,
+                kcal, prot, carb, gord, fibra                  -- por 100g
+porcoes         id, alimento_id, nome ("1 concha"), gramas
+receitas        alimento_id, rendimento_g, n_porcoes           -- fase 3
+receita_itens   receita_id, alimento_id, gramas                -- fase 3
+lancamentos     id, data, refeicao (cafe|almoco|lanche|jantar), alimento_id, gramas,
+                kcal, prot, carb, gord,                        -- congelados no momento do registro
+                origem (manual|agente), estimado, criado_em, removido_em
 metas           vigente_desde, kcal, prot, carb, gord
-auditoria       id, lancamento_id, acao, antes, depois, origem, em
-peso            data, kg                         -- fase 4
+auditoria       id, lancamento_id, acao (criar|editar|remover|desfazer), antes, depois, origem, em, desfeito
+peso            data, kg                                       -- fase 4
 ```
 
 - Os macros ficam **congelados no lançamento**, então editar uma receita não altera o histórico.
 - As **porções caseiras** são do usuário ("minha concha = 90g"), e o Nutri passa a usá-las.
-- A **auditoria** guarda o antes e o depois, o que viabiliza o desfazer e mostra o que o agente mexeu.
+- A **auditoria** guarda o antes e o depois (o lançamento em JSON), o que viabiliza o desfazer e mostra o que o agente mexeu.
+- **Remoção lógica** (`removido_em`): remover não apaga a linha, então o desfazer só restaura o estado anterior. O desfazer é uma pilha global: reverte a mudança mais recente ainda não desfeita, de qualquer origem.
+- **Editar a quantidade** reescala os macros congelados na proporção, sem reler o alimento.
+- **Busca** em `nome_busca` (minúsculo e sem acento), exigindo todos os termos. Ordem: alimentos do usuário, depois os da TACO; crus por último; nomes mais curtos primeiro.
+- **Seed da TACO:** `internal/store/seed/taco.csv`, gerado a partir do CSV do projeto [raulfdm/taco-api](https://github.com/raulfdm/taco-api) (conversão da planilha oficial). "Tr" e células vazias viram 0. Os 6 alimentos sem kcal na tabela original (leite de vaca integral, leite desnatado UHT, iogurte de abacaxi, sal dietético, sal grosso e coco verde cru) ficaram de fora, para não registrar 0 kcal por engano. Sobram 591 alimentos, carregados na primeira execução.
 
 ## 6. Ferramentas MCP
 
@@ -142,7 +149,8 @@ O prompt fica embutido no binário e é passado ao `claude -p`. Regras base:
 ## 8. Segurança
 
 - `rango serve` escuta **só** na interface da Tailscale ou em localhost, nunca em `0.0.0.0`.
-- A web pede senha, mesmo dentro da Tailscale.
+- `rango serve` recusa qualquer endereço que não seja loopback, `100.64.0.0/10` ou `fd7a:115c:a1e0::/48` (Tailscale).
+- A web pede senha, mesmo dentro da Tailscale. A senha vem de `RANGO_SENHA` e o servidor não sobe sem ela. A sessão fica num cookie assinado com HMAC-SHA256, com chave derivada da senha (trocar a senha derruba as sessões), `HttpOnly` e `SameSite=Strict`, o que já protege os formulários de CSRF. Senha errada espera 1 s.
 - O `claude -p` roda com `--allowedTools "mcp__nutri__*"`: sem Bash, sem edição de arquivos e sem web.
 - O agente roda num diretório de trabalho dedicado, isolado do repositório.
 - O MCP é só stdio, então não precisa de autenticação nem de exposição na rede.
@@ -150,7 +158,7 @@ O prompt fica embutido no binário e é passado ao `claude -p`. Regras base:
 ## 9. Fases
 
 - [x] **0. Design**: telas no Stitch (diário do dia, chat, adicionar alimento, receitas, resumo), pensadas primeiro pro celular
-- [ ] **1. Núcleo**: estrutura do projeto, schema e migrations, seed da TACO, diário e metas na web, PWA, senha
+- [x] **1. Núcleo**: estrutura do projeto, schema e migrations, seed da TACO, diário e metas na web, PWA, senha
 - [ ] **2. Nutri**: `rango mcp` (stdio), chat via `claude -p` com streaming, cartões de lançamento com desfazer
 - [ ] **3. Receitas e marmitas**: alimento composto, rendimento, porções
 - [ ] **4. Planejar e analisar**: histórico, peso, revisão semanal, sugestões
@@ -158,5 +166,6 @@ O prompt fica embutido no binário e é passado ao `claude -p`. Regras base:
 ## 10. Em aberto
 
 - Confirmar as flags atuais do `claude -p` (`--output-format stream-json`, `--resume`, `--allowedTools`, prompt de sistema).
-- Termos de uso da TACO: citar a fonte (NEPA/Unicamp) no app e no README.
+- Leite de vaca, iogurte de abacaxi e coco verde não vieram da TACO (sem kcal na tabela). Cadastrar como alimento do usuário quando houver cadastro (fase 3), ou buscar outra fonte.
+- Subcomando `import` (previsto em `cmd/rango`): definir o que importa (alimentos próprios? backup?) antes de implementar.
 - Fotos (de prato e de rótulo): avaliar depois da fase 2.
