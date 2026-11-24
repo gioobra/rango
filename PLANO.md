@@ -19,6 +19,7 @@ Celular (navegador / PWA) ──Tailscale──► rango serve (PC)
 - Tudo roda no PC. O celular só abre a interface web.
 - O chat da web é **apenas um cliente** do MCP. O mesmo MCP funciona no Claude Code, no Claude Desktop ou em qualquer outro cliente. Trocar o motor do chat (API direta, Ollama) não muda as ferramentas.
 - O modelo roda na nuvem da Anthropic. Dados e programa ficam no PC.
+- O `claude -p` chama o próprio executável do Rango (`rango mcp`) como servidor MCP, apontando para o mesmo banco. A web e o MCP escrevem no mesmo SQLite (WAL com `busy_timeout`).
 
 ## 2. Funcionalidades
 
@@ -43,7 +44,7 @@ Fora do escopo: exercícios e treinos.
 | Estilo | Tailwind (CLI standalone, sem Node) | É o formato que o Stitch exporta |
 | Design | Google Stitch | Telas geradas e adaptadas aos templates |
 | Banco | SQLite via `modernc.org/sqlite` | Sem CGO, um arquivo só |
-| MCP | SDK oficial em Go (`modelcontextprotocol/go-sdk`) | Transporte stdio |
+| MCP | SDK oficial em Go (`modelcontextprotocol/go-sdk` v1.8) | Transporte stdio, esquema das ferramentas gerado das structs |
 | Agente | `claude -p` (headless, `stream-json`, `--resume`) | Usa o login do Claude Code local |
 | Alimentos | Tabela TACO (Unicamp) embutida como seed | Alimentos brasileiros desde a primeira execução |
 
@@ -134,38 +135,49 @@ Conjunto pequeno e bem escolhido (lição do Karakeep), com a escrita sob contro
 | 3 | `criar_receita`, `listar_receitas` |
 | 4 | `historico(periodo)`, `registrar_peso` + prompts `revisao_semanal`, `sugerir_refeicao` |
 
-- A flag `--read-only` expõe só as ferramentas de leitura.
-- Os botões rápidos da web ("Resumo da semana", "O que janto?") usam os mesmos prompts do MCP.
+- A flag `--read-only` expõe só as ferramentas de leitura (`buscar_alimento`, `resumo_dia`, `metas`).
+- As saídas são JSON estruturado. `buscar_alimento` já traz as porções salvas, e `registrar_refeicao` devolve os lançamentos e o resumo do dia, para o Nutri responder sem outra chamada.
+- Datas em `AAAA-MM-DD`; sem data, vale hoje.
+- Os atalhos da web ("Resumo de hoje", "O que janto?", "Desfazer último") hoje só mandam texto pronto. Quando os prompts da fase 4 existirem, "Resumo da semana" e "O que janto?" passam a usá-los.
 
 ## 7. O Nutri
 
-O prompt fica embutido no binário e é passado ao `claude -p`. Regras base:
+O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com `--system-prompt`. Cada mensagem leva `[agora: data, dia, hora]`, porque a conversa atravessa dias e o prompt de sistema fica fixo na sessão. Regras base:
 - Sempre usar `buscar_alimento` antes de registrar, preferindo os itens da TACO.
 - Usar as porções salvas do usuário. Quando estimar, marcar `estimado`.
 - Depois de registrar, mostrar o resumo do dia comparado com a meta.
 - Nunca remover sem confirmação.
-- Responder em português, de forma curta.
+- Responder em português, de forma curta e em texto simples (a web não renderiza markdown).
+
+### Chat na web
+- O turno roda numa goroutine e guarda os eventos (texto, ferramenta, cartão, erro, fim). O SSE (`/chat/turnos/{n}`) retoma pelo `Last-Event-ID`, então o celular pode dormir no meio da resposta. Um turno por vez, com limite de 5 min.
+- O streaming usa `EventSource` num `chat.js` pequeno, em vez da extensão SSE do htmx: menos um arquivo de terceiros e controle do reenvio.
+- Resultados de `registrar_refeicao`, `editar_lancamento`, `remover_lancamento` e `desfazer` viram cartões. O "Desfazer" do cartão de registro remove a refeição inteira (`RemoverVarios`), e cada remoção entra na pilha do desfazer.
+- A conversa (sessão do claude, mensagens e cartões) fica na memória do servidor. Reiniciar limpa a tela, e "Nova" começa outra sessão.
+- Ícones: o subconjunto do Material Symbols só tem os glifos em uso, então o botão de enviar é o `arrow_back` girado.
 
 ## 8. Segurança
 
 - `rango serve` escuta **só** na interface da Tailscale ou em localhost, nunca em `0.0.0.0`.
 - `rango serve` recusa qualquer endereço que não seja loopback, `100.64.0.0/10` ou `fd7a:115c:a1e0::/48` (Tailscale).
 - A web pede senha, mesmo dentro da Tailscale. A senha vem de `RANGO_SENHA` e o servidor não sobe sem ela. A sessão fica num cookie assinado com HMAC-SHA256, com chave derivada da senha (trocar a senha derruba as sessões), `HttpOnly` e `SameSite=Strict`, o que já protege os formulários de CSRF. Senha errada espera 1 s.
-- O `claude -p` roda com `--allowedTools "mcp__nutri__*"`: sem Bash, sem edição de arquivos e sem web.
-- O agente roda num diretório de trabalho dedicado, isolado do repositório.
+- O `claude -p` roda com `--restricted --tools "" --strict-mcp-config --mcp-config <só o Rango> --allowedTools "mcp__nutri__*" --permission-mode dontAsk`: sem Bash, sem edição de arquivos, sem web e sem os MCPs e configurações do usuário. A mensagem vai pelo stdin, para não ser lida como flag.
+- O agente roda em `~/.local/share/rango/nutri/` (ao lado do banco), isolado do repositório. O `mcp.json` é gerado ali a cada início.
 - O MCP é só stdio, então não precisa de autenticação nem de exposição na rede.
 
 ## 9. Fases
 
 - [x] **0. Design**: telas no Stitch (diário do dia, chat, adicionar alimento, receitas, resumo), pensadas primeiro pro celular
 - [x] **1. Núcleo**: estrutura do projeto, schema e migrations, seed da TACO, diário e metas na web, PWA, senha
-- [ ] **2. Nutri**: `rango mcp` (stdio), chat via `claude -p` com streaming, cartões de lançamento com desfazer
+- [x] **2. Nutri**: `rango mcp` (stdio), chat via `claude -p` com streaming, cartões de lançamento com desfazer
 - [ ] **3. Receitas e marmitas**: alimento composto, rendimento, porções
 - [ ] **4. Planejar e analisar**: histórico, peso, revisão semanal, sugestões
 
 ## 10. Em aberto
 
-- Confirmar as flags atuais do `claude -p` (`--output-format stream-json`, `--resume`, `--allowedTools`, prompt de sistema).
 - Leite de vaca, iogurte de abacaxi e coco verde não vieram da TACO (sem kcal na tabela). Cadastrar como alimento do usuário quando houver cadastro (fase 3), ou buscar outra fonte.
 - Subcomando `import` (previsto em `cmd/rango`): definir o que importa (alimentos próprios? backup?) antes de implementar.
-- Fotos (de prato e de rótulo): avaliar depois da fase 2.
+- Fotos (de prato e de rótulo): avaliar agora que a fase 2 terminou.
+- Guardar o histórico do chat no banco, para sobreviver a reinícios do servidor (hoje fica na memória).
+- Regerar o subconjunto do Material Symbols com `send` e outros ícones; falta a fonte completa no repositório ou um passo no `make`.
+- Um cartão de registro continua com "Desfazer" mesmo se o Nutri já desfez aquele registro. Clicar não estraga nada, mas confunde.
