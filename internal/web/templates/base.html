@@ -1,0 +1,62 @@
+{{define "pagina"}}<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f8f9ff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111316" media="(prefers-color-scheme: dark)">
+<title>{{.Titulo}} · Rango</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icone-192.png">
+<link rel="apple-touch-icon" href="/static/icone-192.png">
+<link rel="preload" href="/static/fonts/plus-jakarta-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/htmx.min.js" defer></script>
+<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");
+function definirGramas(botao, g) {
+  const campo = botao.form.elements.gramas;
+  campo.value = g;
+  htmx.trigger(campo, "input");
+}
+</script>
+</head>
+<body class="min-h-dvh bg-surface text-on-surface font-sans antialiased">
+{{block "conteudo" .}}{{end}}
+{{if .Aba}}{{template "nav" .Aba}}{{end}}
+</body>
+</html>{{end}}
+
+{{define "topo"}}
+<header class="sticky top-0 z-40 bg-surface/85 backdrop-blur-xl pt-safe">
+  <div class="h-16 px-5 flex items-center justify-between max-w-xl mx-auto">
+    <a href="/diario" class="flex items-center gap-2">
+      <span class="w-8 h-8 rounded-xl bg-primary text-on-primary flex items-center justify-center">
+        <span class="icone text-[20px]">nutrition</span>
+      </span>
+      <span class="text-xl font-bold tracking-tight text-primary">Rango</span>
+    </a>
+    <a href="/metas" class="p-1 rounded-full hover:bg-surface-container-low" aria-label="Metas e conta">
+      <img src="/static/nutri.png" alt="" class="w-8 h-8 rounded-full">
+    </a>
+  </div>
+</header>
+{{end}}
+
+{{define "nav"}}
+<nav class="fixed bottom-0 inset-x-0 z-40 bg-card/95 backdrop-blur-xl border-t border-outline-variant/40 pb-safe">
+  <div class="max-w-xl mx-auto grid grid-cols-4 h-16">
+    {{template "aba" (abaDe "diario" "calendar_today" "Diário" .)}}
+    {{template "aba" (abaDe "chat" "chat" "Chat" .)}}
+    {{template "aba" (abaDe "receitas" "menu_book" "Receitas" .)}}
+    {{template "aba" (abaDe "resumo" "analytics" "Resumo" .)}}
+  </div>
+</nav>
+{{end}}
+
+{{define "aba"}}
+<a href="/{{.Chave}}" class="flex flex-col items-center justify-center gap-0.5 text-[11px] font-semibold {{if .Ativa}}text-primary{{else}}text-on-surface-variant{{end}}">
+  <span class="icone text-[22px] px-4 py-0.5 rounded-full {{if .Ativa}}bg-secondary-container/60 icone-cheio{{end}}">{{.Icone}}</span>
+  {{.Nome}}
+</a>
+{{end}}

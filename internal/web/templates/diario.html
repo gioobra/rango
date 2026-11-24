@@ -1,0 +1,124 @@
+{{define "conteudo"}}
+{{template "topo"}}
+{{$d := .Dia}}
+<main class="max-w-xl mx-auto px-5 pb-32 space-y-4">
+
+  <section class="flex items-center justify-between bg-card p-1 rounded-full shadow-sm">
+    <a href="/diario?data={{iso (diaMais $d.Data -1)}}" aria-label="Dia anterior" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container">
+      <span class="icone text-[20px]">chevron_left</span>
+    </a>
+    <a href="/diario" class="flex items-center gap-1 px-4 py-1.5 rounded-full bg-surface-container-low text-primary text-sm font-bold">
+      <span class="icone text-[18px]">calendar_today</span>{{rotuloData $d.Data}}
+    </a>
+    <a href="/diario?data={{iso (diaMais $d.Data 1)}}" aria-label="Próximo dia" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container">
+      <span class="icone text-[20px]">chevron_right</span>
+    </a>
+  </section>
+
+  {{if .Aviso}}
+  <div class="flex items-center justify-between gap-3 bg-inverse-surface text-inverse-on-surface rounded-2xl px-4 py-3 text-sm" role="status">
+    <span>{{.Aviso}}</span>
+    {{if .PodeDesfazer}}
+    <form method="post" action="/desfazer">
+      <input type="hidden" name="data" value="{{iso $d.Data}}">
+      <button class="font-bold text-inverse-primary flex items-center gap-1"><span class="icone text-[18px]">undo</span>Desfazer</button>
+    </form>
+    {{end}}
+  </div>
+  {{end}}
+
+  <section class="bg-card rounded-3xl p-6 shadow-sm">
+    {{if $d.TemMeta}}
+    {{$estourou := maior $d.Totais.Kcal $d.Meta.Kcal}}
+    <div class="relative w-44 h-44 mx-auto mb-4">
+      <svg class="w-full h-full -rotate-90" viewBox="0 0 160 160" aria-hidden="true">
+        <circle class="text-surface-container fill-none stroke-current" cx="80" cy="80" r="68" stroke-width="12"/>
+        <circle class="{{if $estourou}}text-tertiary{{else}}text-primary{{end}} fill-none stroke-current transition-all duration-700" cx="80" cy="80" r="68"
+          stroke-width="12" stroke-linecap="round" stroke-dasharray="427.3" stroke-dashoffset="{{anel $d.Totais.Kcal $d.Meta.Kcal}}"/>
+      </svg>
+      <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <span class="text-[28px] leading-none font-extrabold tracking-tight">{{num $d.Totais.Kcal}}</span>
+        <span class="text-xs text-on-surface-variant mt-0.5">de {{num $d.Meta.Kcal}} kcal</span>
+        {{if $estourou}}
+        <span class="mt-2 px-2 py-0.5 rounded-full bg-tertiary-container text-on-tertiary-container text-[11px] font-bold">{{num (menos $d.Totais.Kcal $d.Meta.Kcal)}} kcal acima</span>
+        {{else}}
+        <span class="mt-2 px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container text-[11px] font-bold">Restam {{num (menos $d.Meta.Kcal $d.Totais.Kcal)}} kcal</span>
+        {{end}}
+      </div>
+    </div>
+    <div class="space-y-2">
+      {{template "barra" (barraDe "Proteína" "bg-tertiary-container" $d.Totais.Prot $d.Meta.Prot)}}
+      {{template "barra" (barraDe "Carboidrato" "bg-primary" $d.Totais.Carb $d.Meta.Carb)}}
+      {{template "barra" (barraDe "Gordura" "bg-tertiary" $d.Totais.Gord $d.Meta.Gord)}}
+    </div>
+    {{else}}
+    <div class="text-center space-y-3 py-2">
+      <p class="text-[28px] font-extrabold leading-none">{{num $d.Totais.Kcal}} <span class="text-base font-semibold text-on-surface-variant">kcal</span></p>
+      <p class="text-sm text-on-surface-variant">P {{dec $d.Totais.Prot}} g · C {{dec $d.Totais.Carb}} g · G {{dec $d.Totais.Gord}} g</p>
+      <a href="/metas" class="inline-flex items-center gap-1 text-sm font-bold text-primary"><span class="icone text-[18px]">bolt</span>Definir metas</a>
+    </div>
+    {{end}}
+  </section>
+
+  {{range $d.Refeicoes}}
+  <section class="bg-card rounded-3xl shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between px-5 pt-4 pb-2">
+      <div class="flex items-center gap-3">
+        <span class="w-9 h-9 rounded-full bg-secondary-container/50 text-on-secondary-container flex items-center justify-center">
+          <span class="icone text-[20px]">{{iconeRefeicao .Chave}}</span>
+        </span>
+        <div>
+          <h2 class="text-lg font-semibold leading-tight">{{.Nome}}</h2>
+          <p class="text-xs text-on-surface-variant">{{num .Totais.Kcal}} kcal</p>
+        </div>
+      </div>
+      <a href="/adicionar?data={{iso $d.Data}}&refeicao={{.Chave}}" class="flex items-center gap-0.5 px-3 py-1.5 rounded-full bg-surface-container-low text-primary text-xs font-bold">
+        <span class="icone text-[16px]">add</span>Adicionar
+      </a>
+    </div>
+    {{if .Itens}}
+    <ul class="divide-y divide-outline-variant/30 pb-1">
+      {{range .Itens}}
+      <li class="flex items-center gap-3 px-5 py-2.5">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium truncate">{{.AlimentoNome}}
+            {{if .Estimado}}<span class="ml-1 px-1.5 rounded-md bg-tertiary-container/20 text-tertiary text-[10px] font-bold align-middle">estimado</span>{{end}}
+          </p>
+          <p class="text-xs text-on-surface-variant">{{dec .Gramas}} g · P {{dec .Prot}} · C {{dec .Carb}} · G {{dec .Gord}}</p>
+        </div>
+        <span class="text-sm font-semibold text-on-surface-variant whitespace-nowrap">{{num .Kcal}} kcal</span>
+        <form method="post" action="/lancamentos/{{.ID}}/remover">
+          <button aria-label="Remover {{.AlimentoNome}}" class="w-8 h-8 -mr-2 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-error-container hover:text-on-error-container">
+            <span class="icone text-[18px]">close</span>
+          </button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </section>
+  {{end}}
+
+  <div class="fixed inset-x-0 bottom-24 z-30 pointer-events-none">
+    <div class="max-w-xl mx-auto px-5 flex justify-end">
+      <a href="/adicionar?data={{iso $d.Data}}" aria-label="Adicionar alimento"
+         class="pointer-events-auto w-14 h-14 rounded-2xl bg-primary text-on-primary shadow-lg flex items-center justify-center active:scale-95 transition-transform">
+        <span class="icone text-[28px]">add</span>
+      </a>
+    </div>
+  </div>
+</main>
+{{end}}
+
+{{define "barra"}}
+<div>
+  <div class="flex justify-between items-center mb-1 text-xs">
+    <span class="font-semibold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full {{.Cor}}"></span>{{.Nome}}</span>
+    {{if .Meta}}<span class="font-bold">{{num .Valor}} <span class="font-normal text-on-surface-variant">/ {{num .Meta}} g</span></span>
+    {{else}}<span class="font-bold">{{num .Valor}} g</span>{{end}}
+  </div>
+  <div class="w-full h-2 rounded-full bg-surface-container overflow-hidden">
+    <div class="h-full rounded-full {{.Cor}}" style="width: {{pct .Valor .Meta}}%"></div>
+  </div>
+</div>
+{{end}}

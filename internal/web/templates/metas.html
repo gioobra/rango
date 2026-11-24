@@ -1,0 +1,36 @@
+{{define "conteudo"}}
+{{template "topo"}}
+<main class="max-w-xl mx-auto px-5 pb-32 space-y-4">
+  <section class="bg-card rounded-3xl p-6 shadow-sm">
+    <h1 class="text-xl font-bold mb-1">Metas diárias</h1>
+    <p class="text-sm text-on-surface-variant mb-4">Valem a partir de hoje. Os dias anteriores mantêm a meta que tinham.</p>
+    {{if .Salvo}}<p class="mb-4 px-4 py-2 rounded-xl bg-secondary-container text-on-secondary-container text-sm font-semibold" role="status">Metas salvas.</p>{{end}}
+    {{if .Erro}}<p class="mb-4 px-4 py-2 rounded-xl bg-error-container text-on-error-container text-sm" role="alert">{{.Erro}}</p>{{end}}
+    <form method="post" action="/metas" class="space-y-3">
+      {{template "campoMeta" (campoDe "kcal" "Calorias" "kcal" .Meta.Kcal .TemMeta)}}
+      {{template "campoMeta" (campoDe "prot" "Proteína" "g" .Meta.Prot .TemMeta)}}
+      {{template "campoMeta" (campoDe "carb" "Carboidrato" "g" .Meta.Carb .TemMeta)}}
+      {{template "campoMeta" (campoDe "gord" "Gordura" "g" .Meta.Gord .TemMeta)}}
+      <button class="w-full h-12 rounded-2xl bg-primary text-on-primary font-bold">Salvar metas</button>
+    </form>
+  </section>
+
+  <form method="post" action="/sair">
+    <button class="w-full h-12 rounded-2xl bg-card text-error font-semibold shadow-sm flex items-center justify-center gap-2">
+      <span class="icone text-[20px]">logout</span>Sair
+    </button>
+  </form>
+  <p class="text-center text-[11px] text-on-surface-variant">Dados nutricionais: Tabela TACO — NEPA/Unicamp</p>
+</main>
+{{end}}
+
+{{define "campoMeta"}}
+<label class="flex items-center justify-between bg-surface-container-low rounded-2xl px-4 h-14">
+  <span class="font-semibold">{{.Rotulo}}</span>
+  <span class="flex items-baseline gap-1">
+    <input name="{{.Nome}}" type="number" inputmode="decimal" min="0" step="any" {{if .Tem}}value="{{.Valor}}"{{end}}
+      class="w-24 bg-transparent text-right text-lg font-bold focus:outline-none" {{if eq .Nome "kcal"}}required{{end}}>
+    <span class="text-sm text-on-surface-variant w-7">{{.Unidade}}</span>
+  </span>
+</label>
+{{end}}

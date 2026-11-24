@@ -1,0 +1,15 @@
+{
+  "name": "Rango",
+  "short_name": "Rango",
+  "description": "Diário alimentar com o Nutri",
+  "lang": "pt-BR",
+  "start_url": "/diario",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8f9ff",
+  "theme_color": "#006b2c",
+  "icons": [
+    { "src": "/static/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
