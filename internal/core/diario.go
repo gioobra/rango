@@ -165,21 +165,28 @@ func (s *Servico) Remover(ctx context.Context, id int64, origem string) (store.L
 	var antes store.Lancamento
 	err := s.db.Tx(ctx, func(r *store.Repo) error {
 		var err error
-		if antes, err = r.Lancamento(ctx, id); err != nil {
-			return err
-		}
-		if antes.RemovidoEm != nil {
-			return ErrNaoEncontrado
-		}
-		depois := antes
-		agora := s.agora().Format(time.RFC3339)
-		depois.RemovidoEm = &agora
-		if err := r.AtualizarLancamento(ctx, depois); err != nil {
-			return err
-		}
-		return s.auditar(ctx, r, "remover", origem, &antes, &depois)
+		antes, err = s.remover(ctx, r, id, origem)
+		return err
 	})
 	return antes, err
+}
+
+// remover faz a remoção lógica e audita. ErrNaoEncontrado se o lançamento não existe ou já saiu.
+func (s *Servico) remover(ctx context.Context, r *store.Repo, id int64, origem string) (store.Lancamento, error) {
+	antes, err := r.Lancamento(ctx, id)
+	if err != nil {
+		return antes, err
+	}
+	if antes.RemovidoEm != nil {
+		return antes, ErrNaoEncontrado
+	}
+	depois := antes
+	agora := s.agora().Format(time.RFC3339)
+	depois.RemovidoEm = &agora
+	if err := r.AtualizarLancamento(ctx, depois); err != nil {
+		return antes, err
+	}
+	return antes, s.auditar(ctx, r, "remover", origem, &antes, &depois)
 }
 
 // ErrNadaADesfazer indica que não há mudança pendente para desfazer.
@@ -294,4 +301,52 @@ func (s *Servico) Diario(ctx context.Context, data time.Time) (Dia, error) {
 func (s *Servico) Hoje() time.Time {
 	t := s.agora()
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
+// Restante é quanto falta para a meta (negativo quando estourou). Zero sem meta.
+func (d Dia) Restante() Totais {
+	if !d.TemMeta {
+		return Totais{}
+	}
+	return Totais{
+		Kcal: arred(d.Meta.Kcal - d.Totais.Kcal),
+		Prot: arred(d.Meta.Prot - d.Totais.Prot),
+		Carb: arred(d.Meta.Carb - d.Totais.Carb),
+		Gord: arred(d.Meta.Gord - d.Totais.Gord),
+	}
+}
+
+// RemoverVarios tira do diário os lançamentos ainda ativos da lista, numa transação só.
+// Serve para desfazer de uma vez uma refeição registrada pelo Nutri.
+func (s *Servico) RemoverVarios(ctx context.Context, ids []int64, origem string) ([]store.Lancamento, error) {
+	if err := validarOrigem(origem); err != nil {
+		return nil, err
+	}
+	var out []store.Lancamento
+	err := s.db.Tx(ctx, func(r *store.Repo) error {
+		for _, id := range ids {
+			antes, err := s.remover(ctx, r, id, origem)
+			if errors.Is(err, store.ErrNaoEncontrado) {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			out = append(out, antes)
+		}
+		return nil
+	})
+	return out, err
+}
+
+// LerData interpreta AAAA-MM-DD; vazio é hoje.
+func (s *Servico) LerData(v string) (time.Time, error) {
+	if v == "" || v == "hoje" {
+		return s.Hoje(), nil
+	}
+	t, err := time.ParseInLocation(FormatoData, v, time.Local)
+	if err != nil {
+		return t, invalido("data inválida %q: use AAAA-MM-DD", v)
+	}
+	return t, nil
 }

@@ -1,9 +1,10 @@
 // Service worker do Rango: guarda os arquivos estáticos para abrir rápido.
 // As páginas sempre vêm da rede, porque os dados ficam no PC.
-const VERSAO = "rango-v1";
+const VERSAO = "rango-v2";
 const ESTATICOS = [
   "/static/app.css",
   "/static/htmx.min.js",
+  "/static/chat.js",
   "/static/nutri.png",
   "/static/fonts/plus-jakarta-sans.woff2",
   "/static/fonts/material-symbols.woff2",

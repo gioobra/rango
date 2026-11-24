@@ -1,6 +1,7 @@
 // Comando rango: diário alimentar local.
 //
 //	rango serve   sobe a interface web
+//	rango mcp     servidor MCP no stdio, para o Nutri e outros clientes
 package main
 
 import (
@@ -12,23 +13,30 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/gioobra/rango/internal/agent"
 	"github.com/gioobra/rango/internal/core"
+	"github.com/gioobra/rango/internal/mcp"
 	"github.com/gioobra/rango/internal/store"
 	"github.com/gioobra/rango/internal/web"
 )
+
+const versao = "0.2.0"
 
 const uso = `uso: rango <comando>
 
 comandos:
   serve   sobe a interface web
+  mcp     servidor MCP no stdio (--read-only expõe só as ferramentas de leitura)
 
 variáveis de ambiente:
   RANGO_SENHA   senha da web (obrigatória)
   RANGO_ADDR    endereço de escuta (padrão 127.0.0.1:8080; aceita localhost ou IP da Tailscale)
   RANGO_DB      caminho do banco (padrão ~/.local/share/rango/rango.db)
+  RANGO_CLAUDE  binário do Claude Code usado pelo Nutri (padrão claude, do PATH)
 `
 
 func main() {
@@ -41,6 +49,8 @@ func main() {
 	switch os.Args[1] {
 	case "serve":
 		err = serve(os.Args[2:], log)
+	case "mcp":
+		err = servirMCP(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(uso)
 	default:
@@ -60,15 +70,42 @@ func env(nome, padrao string) string {
 	return padrao
 }
 
+func caminhoBanco() (string, error) {
+	if c := os.Getenv("RANGO_DB"); c != "" {
+		return filepath.Abs(c)
+	}
+	return store.CaminhoPadrao()
+}
+
 func abrirBanco(ctx context.Context) (*store.Store, error) {
-	caminho := os.Getenv("RANGO_DB")
-	if caminho == "" {
-		var err error
-		if caminho, err = store.CaminhoPadrao(); err != nil {
-			return nil, err
-		}
+	caminho, err := caminhoBanco()
+	if err != nil {
+		return nil, err
 	}
 	return store.Abrir(ctx, caminho)
+}
+
+// novoAgente prepara o Nutri: o claude chama este mesmo executável como servidor MCP.
+func novoAgente(log *slog.Logger) (*agent.Agente, error) {
+	db, err := caminhoBanco()
+	if err != nil {
+		return nil, err
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	a, err := agent.Novo(agent.Config{
+		Claude: env("RANGO_CLAUDE", "claude"), Rango: exe, DB: db,
+		Dir: filepath.Join(filepath.Dir(db), "nutri"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := a.Disponivel(); err != nil {
+		log.Warn("chat sem o Nutri", "err", err)
+	}
+	return a, nil
 }
 
 func serve(args []string, log *slog.Logger) error {
@@ -88,7 +125,11 @@ func serve(args []string, log *slog.Logger) error {
 	}
 	defer func() { _ = db.Fechar() }()
 
-	srv, err := web.Novo(core.Novo(db), os.Getenv("RANGO_SENHA"), log)
+	agente, err := novoAgente(log)
+	if err != nil {
+		return err
+	}
+	srv, err := web.Novo(core.Novo(db), agente, os.Getenv("RANGO_SENHA"), log)
 	if err != nil {
 		return err
 	}
@@ -104,4 +145,19 @@ func serve(args []string, log *slog.Logger) error {
 		return err
 	}
 	return nil
+}
+
+func servirMCP(args []string) error {
+	fs := flag.NewFlagSet("mcp", flag.ExitOnError)
+	somenteLeitura := fs.Bool("read-only", false, "expõe só as ferramentas de leitura")
+	_ = fs.Parse(args)
+
+	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer parar()
+	db, err := abrirBanco(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Fechar() }()
+	return mcp.Rodar(ctx, mcp.Novo(core.Novo(db), versao, *somenteLeitura))
 }

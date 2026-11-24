@@ -1,0 +1,168 @@
+{{define "conteudo"}}
+{{template "topo"}}
+<main class="max-w-xl mx-auto px-5 pb-44">
+  <section class="flex items-center justify-between bg-card rounded-3xl p-2 pr-3 shadow-sm mb-4">
+    <div class="flex items-center gap-3">
+      <img src="/static/nutri.png" alt="" class="w-11 h-11 rounded-full bg-secondary-container">
+      <div>
+        <h1 class="text-lg font-semibold leading-tight">Nutri</h1>
+        <p class="text-xs text-on-surface-variant">Registra, corrige e planeja o que você come</p>
+      </div>
+    </div>
+    <form method="post" action="/chat/nova">
+      <button class="flex items-center gap-1 px-3 py-1.5 rounded-full bg-surface-container-low text-primary text-xs font-bold" aria-label="Nova conversa">
+        <span class="icone text-[16px]">add</span>Nova
+      </button>
+    </form>
+  </section>
+
+  {{if .Indisponivel}}
+  <p class="bg-error-container text-on-error-container rounded-2xl px-4 py-3 text-sm mb-4" role="alert">{{.Indisponivel}}</p>
+  {{end}}
+
+  <div id="mensagens" class="flex flex-col gap-4" aria-live="polite">
+    {{if not (or .Mensagens .Turno)}}
+    {{template "nutri" "Oi! Me conta o que você comeu, por exemplo: “almocei um prato de arroz, uma concha de feijão e um bife”. Também posso corrigir, desfazer e sugerir o que comer pra fechar a meta."}}
+    {{end}}
+    {{range .Mensagens}}
+      {{if .DoUsuario}}{{template "usuario" .}}
+      {{else if ge .Cartao 0}}{{template "cartao" (index $.Cartoes .Cartao)}}
+      {{else}}{{template "nutri" .Texto}}{{end}}
+    {{end}}
+    {{with .Turno}}{{template "turno" .}}{{end}}
+  </div>
+</main>
+
+<div class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 bg-gradient-to-t from-surface via-surface to-surface/0 pt-4 pb-2">
+  <div class="max-w-xl mx-auto px-5 space-y-2">
+    <div class="flex gap-2 overflow-x-auto -mx-5 px-5">
+      {{template "atalho" (atalhoDe "Resumo de hoje" "analytics" "Como está meu dia hoje em relação à meta?")}}
+      {{template "atalho" (atalhoDe "O que janto?" "dinner_dining" "O que eu janto pra fechar a meta de hoje?")}}
+      {{template "atalho" (atalhoDe "Desfazer último" "undo" "Desfaz o último registro.")}}
+    </div>
+    <form id="form-chat" hx-post="/chat" hx-target="#mensagens" hx-swap="beforeend"
+          class="flex items-center gap-2 bg-card p-1.5 pl-4 rounded-full shadow-md">
+      <input name="mensagem" autocomplete="off" required maxlength="4000" placeholder="Fale com o Nutri…" aria-label="Mensagem"
+             class="flex-1 min-w-0 bg-transparent text-on-surface placeholder:text-on-surface-variant focus:outline-none" {{if .Turno}}disabled{{end}}>
+      <button aria-label="Enviar" class="w-11 h-11 shrink-0 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50" {{if .Turno}}disabled{{end}}>
+        <span class="icone text-[20px] rotate-180">arrow_back</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<template id="tpl-nutri">{{template "nutri" ""}}</template>
+<template id="tpl-erro">
+  <div class="flex items-start gap-2.5 pr-8">
+    <img src="/static/nutri.png" alt="" class="w-8 h-8 rounded-full shrink-0 mt-0.5">
+    <p data-texto class="bg-error-container text-on-error-container rounded-2xl rounded-tl-sm px-4 py-3 text-[15px] leading-relaxed"></p>
+  </div>
+</template>
+<script src="/static/chat.js" defer></script>
+{{end}}
+
+{{define "atalho"}}
+<button type="button" data-atalho="{{.Mensagem}}" class="shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-card shadow-sm text-xs font-semibold active:scale-95">
+  <span class="icone text-[16px] text-primary">{{.Icone}}</span>{{.Rotulo}}
+</button>
+{{end}}
+
+{{define "usuario"}}
+<div class="flex justify-end pl-10">
+  <div class="bg-primary text-on-primary rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm max-w-[85%]">
+    <p class="text-[15px] leading-relaxed whitespace-pre-wrap break-words">{{.Texto}}</p>
+    <p class="text-[10px] text-right opacity-80 mt-1">{{hora .Hora}}</p>
+  </div>
+</div>
+{{end}}
+
+{{define "nutri"}}
+<div class="flex items-start gap-2.5 pr-8">
+  <img src="/static/nutri.png" alt="" class="w-8 h-8 rounded-full shrink-0 mt-0.5">
+  <p data-texto class="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm text-[15px] leading-relaxed whitespace-pre-wrap break-words">{{.}}</p>
+</div>
+{{end}}
+
+{{/* Resposta do POST /chat e turno em andamento ao abrir a página. */}}
+{{define "turno"}}
+{{template "usuario" .Pergunta}}
+<div data-turno="{{.N}}" class="flex flex-col gap-4">
+  <div data-pensando class="flex items-center gap-2.5 text-sm text-on-surface-variant">
+    <img src="/static/nutri.png" alt="" class="w-8 h-8 rounded-full animate-pulse">
+    <span data-status>Pensando…</span>
+  </div>
+</div>
+{{end}}
+
+{{define "cartao"}}
+<div class="pl-10" id="cartao-{{.N}}">
+  <article class="bg-card rounded-2xl p-4 shadow-md space-y-3">
+    <header class="flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <span class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center text-primary">
+          <span class="icone icone-cheio text-[20px]">{{if eq .Acao "registrar"}}{{iconeRefeicao .Refeicao}}{{else if eq .Acao "editar"}}restaurant{{else}}undo{{end}}</span>
+        </span>
+        <div>
+          <p class="text-[11px] font-bold uppercase tracking-wider text-primary">{{rotuloData (dataDe .Data)}}</p>
+          <h2 class="font-semibold leading-tight">
+            {{- if .Desfeito}}Registro desfeito
+            {{- else if eq .Acao "registrar"}}{{refeicao .Refeicao}} registrado
+            {{- else if eq .Acao "editar"}}Lançamento corrigido
+            {{- else if eq .Acao "remover"}}Item removido
+            {{- else}}Mudança desfeita{{end -}}
+          </h2>
+        </div>
+      </div>
+      {{if not .Desfeito}}<span class="icone icone-cheio text-[22px] text-primary">check_circle</span>{{end}}
+    </header>
+
+    <ul class="space-y-2">
+      {{range .Lancamentos}}
+      {{$fora := or $.Desfeito (eq $.Acao "remover") .RemovidoEm}}
+      <li class="flex items-center justify-between gap-3 p-2 rounded-xl bg-surface-container-low {{if $fora}}opacity-60{{end}}">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold truncate {{if $fora}}line-through{{end}}">{{.AlimentoNome}}</p>
+          <p class="text-xs text-on-surface-variant flex items-center gap-1.5">
+            <span {{if $fora}}class="line-through"{{end}}>{{dec .Gramas}} g · {{refeicao .Refeicao}}</span>
+            {{if and .Estimado (not $fora)}}<span class="px-1.5 rounded-full bg-tertiary-container text-on-tertiary-container text-[10px] font-bold">estimado</span>{{end}}
+          </p>
+        </div>
+        <span class="text-sm font-bold shrink-0 {{if $fora}}line-through{{end}}">{{num .Kcal}} kcal</span>
+      </li>
+      {{end}}
+    </ul>
+
+    {{if and (eq .Acao "registrar") (gt (len .Lancamentos) 1) (not .Desfeito)}}
+    <div class="flex items-center justify-between px-3 py-2 rounded-xl bg-surface-container-high">
+      <span class="text-sm font-semibold">Total da refeição</span>
+      <span class="text-lg font-extrabold text-primary">{{num .Total}} <span class="text-xs font-semibold text-on-surface">kcal</span></span>
+    </div>
+    {{end}}
+
+    {{if .Dia.TemMeta}}
+    <div class="grid grid-cols-2 gap-2 text-xs">
+      <div class="rounded-xl bg-surface-container-low px-3 py-2">
+        <p class="text-on-surface-variant uppercase text-[10px] font-bold">Dia · energia</p>
+        <p class="font-bold {{if maior .Dia.Totais.Kcal .Dia.Meta.Kcal}}text-tertiary{{end}}">{{num .Dia.Totais.Kcal}} <span class="font-normal text-on-surface-variant">/ {{num .Dia.Meta.Kcal}} kcal</span></p>
+      </div>
+      <div class="rounded-xl bg-surface-container-low px-3 py-2">
+        <p class="text-on-surface-variant uppercase text-[10px] font-bold">Dia · proteína</p>
+        <p class="font-bold">{{num .Dia.Totais.Prot}} <span class="font-normal text-on-surface-variant">/ {{num .Dia.Meta.Prot}} g</span></p>
+      </div>
+    </div>
+    {{end}}
+
+    <footer class="flex items-center justify-end gap-2">
+      <a href="/diario?data={{.Data}}" class="flex items-center gap-1 px-3.5 py-2 rounded-full bg-surface-container-low text-primary text-xs font-bold">
+        <span class="icone text-[16px]">calendar_today</span>Ver no diário
+      </a>
+      {{if and (eq .Acao "registrar") (not .Desfeito)}}
+      <button hx-post="/chat/cartoes/{{.N}}/desfazer" hx-target="#cartao-{{.N}}" hx-swap="outerHTML"
+              class="flex items-center gap-1 px-3.5 py-2 rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold active:scale-95">
+        <span class="icone text-[16px]">undo</span>Desfazer
+      </button>
+      {{end}}
+    </footer>
+  </article>
+</div>
+{{end}}

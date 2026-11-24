@@ -155,6 +155,28 @@ func TestDesfazerReverteNaOrdemInversa(t *testing.T) {
 	}
 }
 
+func TestRemoverVariosPulaOsJaRemovidos(t *testing.T) {
+	s, ctx := novoServico(t)
+	arroz := primeiro(t, s, ctx, "arroz")
+	ls, _ := s.Registrar(ctx, Registro{Data: s.Hoje(), Refeicao: "jantar", Origem: OrigemAgente,
+		Itens: []Item{{AlimentoID: arroz.ID, Gramas: 100}, {AlimentoID: arroz.ID, Gramas: 50}}})
+	if _, err := s.Remover(ctx, ls[1].ID, OrigemAgente); err != nil {
+		t.Fatal(err)
+	}
+	fora, err := s.RemoverVarios(ctx, []int64{ls[0].ID, ls[1].ID, 999}, OrigemManual)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fora) != 1 || fora[0].ID != ls[0].ID {
+		t.Fatalf("removeu %v, queria só o %d", fora, ls[0].ID)
+	}
+	// cada remoção entra na pilha do desfazer
+	d, err := s.Desfazer(ctx, OrigemManual)
+	if err != nil || d.Acao != "remover" || d.Lancamento.ID != ls[0].ID {
+		t.Fatalf("desfazer: %+v %v", d, err)
+	}
+}
+
 func TestMetaVigente(t *testing.T) {
 	s, ctx := novoServico(t)
 	if _, ok, _ := s.Metas(ctx, s.Hoje()); ok {

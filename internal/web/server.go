@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gioobra/rango/internal/agent"
 	"github.com/gioobra/rango/internal/core"
 )
 
@@ -29,18 +30,20 @@ var staticFS embed.FS
 
 // Servidor é a aplicação web.
 type Servidor struct {
-	svc     *core.Servico
-	sessao  *sessao
-	paginas map[string]*template.Template
-	log     *slog.Logger
+	svc      *core.Servico
+	agente   *agent.Agente
+	conversa *conversa
+	sessao   *sessao
+	paginas  map[string]*template.Template
+	log      *slog.Logger
 }
 
 // Novo monta o servidor. A senha é obrigatória.
-func Novo(svc *core.Servico, senha string, log *slog.Logger) (*Servidor, error) {
+func Novo(svc *core.Servico, agente *agent.Agente, senha string, log *slog.Logger) (*Servidor, error) {
 	if senha == "" {
 		return nil, errors.New("defina RANGO_SENHA: a web sempre pede senha")
 	}
-	s := &Servidor{svc: svc, sessao: novaSessao(senha), log: log}
+	s := &Servidor{svc: svc, agente: agente, conversa: &conversa{}, sessao: novaSessao(senha), log: log}
 	if err := s.carregarTemplates(); err != nil {
 		return nil, err
 	}
@@ -75,11 +78,19 @@ func (s *Servidor) carregarTemplates() error {
 		"pct":        pct,
 		"rotuloData": rotuloData,
 		"iso":        func(t time.Time) string { return t.Format(core.FormatoData) },
-		"diaMais":    func(t time.Time, n int) time.Time { return t.AddDate(0, 0, n) },
-		"refeicao":   core.NomeRefeicao,
-		"anel":       anel,
-		"menos":      func(a, b float64) float64 { return a - b },
-		"maior":      func(a, b float64) bool { return a > b },
+		"hora":       func(t time.Time) string { return t.Format("15:04") },
+		"dataDe": func(v string) time.Time {
+			t, _ := time.ParseInLocation(core.FormatoData, v, time.Local)
+			return t
+		},
+		"atalhoDe": func(rotulo, icone, mensagem string) map[string]string {
+			return map[string]string{"Rotulo": rotulo, "Icone": icone, "Mensagem": mensagem}
+		},
+		"diaMais":  func(t time.Time, n int) time.Time { return t.AddDate(0, 0, n) },
+		"refeicao": core.NomeRefeicao,
+		"anel":     anel,
+		"menos":    func(a, b float64) float64 { return a - b },
+		"maior":    func(a, b float64) bool { return a > b },
 		"barraDe": func(nome, cor string, valor, meta float64) map[string]any {
 			return map[string]any{"Nome": nome, "Cor": cor, "Valor": valor, "Meta": meta}
 		},
@@ -148,7 +159,12 @@ func (s *Servidor) Handler() http.Handler {
 	m.HandleFunc("POST /desfazer", s.desfazer)
 	m.HandleFunc("GET /metas", s.paginaMetas)
 	m.HandleFunc("POST /metas", s.salvarMetas)
-	for _, aba := range []string{"chat", "receitas", "resumo"} {
+	m.HandleFunc("GET /chat", s.chat)
+	m.HandleFunc("POST /chat", s.enviar)
+	m.HandleFunc("GET /chat/turnos/{n}", s.eventos)
+	m.HandleFunc("POST /chat/cartoes/{n}/desfazer", s.desfazerCartao)
+	m.HandleFunc("POST /chat/nova", s.novaConversa)
+	for _, aba := range []string{"receitas", "resumo"} {
 		m.HandleFunc("GET /"+aba, s.emBreve(aba))
 	}
 	return s.exigirLogin(cabecalhos(m))

@@ -252,7 +252,6 @@ func (s *Servidor) salvarMetas(w http.ResponseWriter, r *http.Request) {
 
 func (s *Servidor) emBreve(aba string) http.HandlerFunc {
 	nomes := map[string][2]string{
-		"chat":     {"Chat", "O Nutri chega na fase 2."},
 		"receitas": {"Receitas", "Receitas e marmitas chegam na fase 3."},
 		"resumo":   {"Resumo", "Histórico e revisão semanal chegam na fase 4."},
 	}
