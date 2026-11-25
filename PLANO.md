@@ -218,3 +218,23 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - "Dia registrado" é ter um lançamento. Um dia anotado pela metade puxa a média e o TDEE para baixo. Avaliar marcar o dia como completo, ou ignorar dias muito abaixo da média.
 - Plano da semana e lista de compras (seção 2) ainda não existem. Dá para montar em cima de `simular_refeicao` e das receitas.
 - Apagar uma pesagem pela web ou pelo Nutri (o `core` já tem `RemoverPeso`; hoje só dá para substituir a do dia).
+
+## 11. Ideias
+
+Evoluções pensadas para facilitar o self-hosting e permitir rodar o Nutri sem depender exclusivamente do Claude Code local, preservando a arquitetura atual (`web` e `mcp` → `core` → `store`).
+
+### Provedor de API OpenAI-compatible (`internal/agent`)
+- **Interface `agent.Provedor`:** extrair `Disponivel()` e `Conversar(...)` para uma interface, mantendo o backend `claude -p` intacto como padrão quando nenhuma API externa estiver configurada.
+- **SDK oficial (`github.com/openai/openai-go/v3`):** preferido em vez de um cliente HTTP/SSE artesanal para evitar bugs em chunks fragmentados de `tool_calls` (`ChatCompletionAccumulator`), mantendo apenas uma dependência nova no `go.mod`.
+- **Reaproveitamento do MCP em memória:** o backend de API conecta-se diretamente ao `mcp.Novo(...)` no mesmo processo via `InMemoryTransport` do `modelcontextprotocol/go-sdk`. `ListTools` alimenta as ferramentas da API, `CallTool` executa no `core` emitindo os mesmos eventos (`Ferramenta` e `Resultado`, preservando os cartões com "Desfazer" sem alterar `internal/web/chat.go`), e `GetPrompt` expande os atalhos (`revisao_semanal`, `sugerir_refeicao`).
+- **Configuração por ambiente:** `RANGO_LLM_URL`, `RANGO_LLM_MODEL` e `RANGO_LLM_KEY` (opcional). Quando `RANGO_LLM_MODEL` está definido, o servidor usa o backend de API — compatível com Ollama local (gratuito), Gemini, Groq, OpenRouter, LM Studio e OpenAI.
+- **Sessão e limites:** histórico da conversa mantido em memória por sessão (alinhado ao comportamento atual do chat) e limite de iterações de tool calls por turno.
+- **Testes sem chave real:** `httptest.Server` simulando streaming SSE e chamadas de ferramenta contra o MCP em memória e SQLite temporário.
+
+### Docker e self-hosting
+- **Rede configurável via ambiente:** manter `ValidarEndereco` restrito a `localhost` e Tailscale por padrão, adicionando opt-in via `RANGO_PERMITIR_EXTERNO=1` para liberar bind em `0.0.0.0` dentro de containers sem exigir flags extras no CLI.
+- **Imagem enxuta (`Dockerfile` + `.dockerignore`):** build multi-stage (`CGO_ENABLED=0`) gerando imagem final em `gcr.io/distroless/static-debian12:nonroot` (~20 MB, com CA certs para chamadas HTTPS às APIs de LLM e sem Node/Tailwind no build porque `app.css` já é versionado).
+- **`docker-compose.yml`:** exemplo pronto com volume persistente em `/data` (`RANGO_DB=/data/rango.db`) e variáveis comentadas para Ollama no host (`http://host.docker.internal:11434/v1`) ou API externa.
+
+### Licença
+- Código licenciado sob **MIT** (`LICENSE`), compatível com todas as dependências e assets embutidos; dados da TACO, fontes e bibliotecas mantêm suas atribuições no `README.md`.

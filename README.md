@@ -75,3 +75,7 @@ As telas de referência, exportadas do Google Stitch, ficam em `design/stitch/`.
 As informações nutricionais vêm da **Tabela Brasileira de Composição de Alimentos (TACO), 4ª edição, do NEPA/Unicamp**. A conversão para CSV usada como base é a do projeto [raulfdm/taco-api](https://github.com/raulfdm/taco-api).
 
 Ícones: [Material Symbols](https://fonts.google.com/icons) (Apache 2.0). Fonte: [Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans) (OFL). Interatividade: [htmx](https://htmx.org) (0BSD).
+
+## Licença
+
+O código do Rango é distribuído sob a licença [MIT](LICENSE). Os dados nutricionais da TACO, fontes e bibliotecas de terceiros mantêm suas respectivas licenças e atribuições acima.
