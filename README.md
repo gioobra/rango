@@ -4,7 +4,7 @@ Diário alimentar local, leve e em português, com um agente (**Nutri**) que reg
 
 O Rango é um binário Go único que roda no seu PC. Você acessa pelo celular através da Tailscale. O Nutri é o Claude Code em modo headless, conversando com o Rango via MCP.
 
-O que já funciona (fases 1 a 3): diário do dia com metas, busca nos alimentos da TACO, porções caseiras, remoção com desfazer, tema claro e escuro, PWA e senha, o chat com o Nutri, que registra e corrige por texto, e receitas e marmitas. Histórico e revisão semanal chegam na fase 4. O plano e as decisões estão em [`PLANO.md`](PLANO.md).
+O que já funciona (fases 1 a 4): diário do dia com metas, busca nos alimentos da TACO, porções caseiras, remoção com desfazer, tema claro e escuro, PWA e senha, o chat com o Nutri, que registra e corrige por texto, receitas e marmitas, e a análise: médias, aderência à meta, peso e gasto diário estimado, todos calculados pelo app. O plano e as decisões estão em [`PLANO.md`](PLANO.md).
 
 ## Requisitos
 
@@ -45,9 +45,11 @@ Abra `http://127.0.0.1:8080`, entre com a senha, defina as metas no ícone do ro
 
 Na aba Receitas, cadastre a panela (ingredientes crus, peso pronto se pesou e em quantas porções rendeu) e registre cada marmita com um toque. Pelo chat também funciona: "fiz 4 marmitas com 500 g de frango e 600 g de batata" e, depois, "comi uma marmita". Produtos fora da TACO podem ser cadastrados pelo Nutri com os valores do rótulo.
 
+Na aba Resumo, escolha 7, 14 ou 30 dias para ver dias anotados, médias, aderência à meta, de onde vêm as calorias, fibra, refeições e os alimentos que mais pesaram. Registre o peso de manhã no mesmo lugar: com 14 dias de pesagem e a maior parte dos dias anotada, aparece o gasto diário estimado (TDEE). O botão "Revisão da semana com o Nutri" e os atalhos do chat pedem ao Nutri uma revisão ou sugestões de refeição, sempre com os números calculados pelo app.
+
 ### MCP em outros clientes
 
-`rango mcp` é um servidor MCP no stdio com as mesmas ferramentas do Nutri. Com `--read-only`, expõe só as de consulta. Para usar no Claude Code ou no Claude Desktop:
+`rango mcp` é um servidor MCP no stdio com as mesmas ferramentas e prompts do Nutri (`revisao_semanal`, `sugerir_refeicao`). Com `--read-only`, expõe só as de consulta. Para usar no Claude Code ou no Claude Desktop:
 
 ```json
 {"mcpServers": {"rango": {"command": "/caminho/para/bin/rango", "args": ["mcp"]}}}

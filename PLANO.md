@@ -29,7 +29,7 @@ Celular (navegador / PWA) ──Tailscale──► rango serve (PC)
 | Correção | "na verdade foram 200g", "desfaz o último" |
 | Receitas e marmitas | "fiz 4 marmitas com 500g de frango, 600g de batata e 100g de azeite" |
 | Planejar | "o que janto pra fechar a proteína de hoje?", plano da semana e lista de compras |
-| Analisar | revisão semanal, tendências, médias e (com peso) estimativa de TDEE |
+| Analisar | revisão semanal, tendências, médias, aderência à meta e (com peso) TDEE adaptativo, sempre calculados pelo app |
 
 Fora do escopo: exercícios e treinos.
 
@@ -110,11 +110,11 @@ porcoes         id, alimento_id, nome ("1 concha"), gramas
 receitas        alimento_id, rendimento_g, n_porcoes, nome_porcao, criado_em, editado_em
 receita_itens   id, receita_id, alimento_id, gramas            -- gramas crus, como foram para a panela
 lancamentos     id, data, refeicao (cafe|almoco|lanche|jantar), alimento_id, gramas,
-                kcal, prot, carb, gord,                        -- congelados no momento do registro
+                kcal, prot, carb, gord, fibra,                 -- congelados no momento do registro
                 origem (manual|agente), estimado, criado_em, removido_em
 metas           vigente_desde, kcal, prot, carb, gord
 auditoria       id, lancamento_id, acao (criar|editar|remover|desfazer), antes, depois, origem, em, desfeito
-peso            data, kg                                       -- fase 4
+peso            data, kg                                       -- uma pesagem por dia (a última vale)
 ```
 
 - Os macros ficam **congelados no lançamento**, então editar uma receita não altera o histórico.
@@ -126,7 +126,28 @@ peso            data, kg                                       -- fase 4
 - **Remoção lógica** (`removido_em`): remover não apaga a linha, então o desfazer só restaura o estado anterior. O desfazer é uma pilha global: reverte a mudança mais recente ainda não desfeita, de qualquer origem.
 - **Editar a quantidade** reescala os macros congelados na proporção, sem reler o alimento.
 - **Busca** em `nome_busca` (minúsculo e sem acento), exigindo todos os termos. Ordem: alimentos do usuário, depois os da TACO; crus por último; nomes mais curtos primeiro.
+- **Fibra congelada** (fase 4): entrou depois. A migration preenche os lançamentos antigos a partir do alimento (gramas × fibra por 100 g), o que é exato para a TACO e aproximado para receitas editadas depois do registro.
 - **Seed da TACO:** `internal/store/seed/taco.csv`, gerado a partir do CSV do projeto [raulfdm/taco-api](https://github.com/raulfdm/taco-api) (conversão da planilha oficial). "Tr" e células vazias viram 0. Os 6 alimentos sem kcal na tabela original (leite de vaca integral, leite desnatado UHT, iogurte de abacaxi, sal dietético, sal grosso e coco verde cru) ficaram de fora, para não registrar 0 kcal por engano. Sobram 591 alimentos, carregados na primeira execução.
+
+### Análise determinística (fase 4)
+
+Toda métrica é calculada no `core`, testada e devolvida pronta. O Nutri não faz conta: ele lê os números das ferramentas e explica. A aba Resumo mostra os mesmos números, então chat e tela nunca divergem.
+
+- **Energia dos macros:** proteína e carboidrato valem 4 kcal/g e gordura 9 kcal/g. A distribuição (% das kcal de P, C e G) usa a soma dessas três, não a kcal da tabela, para fechar em 100%.
+- **Dia registrado:** tem ao menos um lançamento. Dias vazios ficam fora das médias, e a cobertura (dias registrados ÷ dias do período) aparece junto, para não confundir "comi pouco" com "não anotei".
+- **Período** (7, 14 ou 30 dias até uma data):
+  - média diária e desvio padrão de kcal; médias de P, C, G e fibra;
+  - aderência: dias a até ±10% da meta de kcal e dias com proteína ≥ meta, contados só entre os dias registrados que têm meta;
+  - fatia de cada refeição nas kcal do período;
+  - os 5 alimentos que mais trouxeram kcal e os 5 que mais trouxeram proteína;
+  - fatia das kcal que veio de quantidade estimada.
+- **Peso:** tendência por média móvel exponencial (α = 0,1, como no Hacker's Diet). Começa na primeira pesagem e, em dia sem pesagem, repete o valor anterior. Assim a oscilação de água do dia a dia não engana.
+- **TDEE adaptativo:** média das kcal dos dias registrados − (tendência no fim − tendência no início) × 7.700 kcal/kg ÷ dias, numa janela de até 28 dias. Só é calculado com ao menos 14 dias desde a primeira pesagem dentro da janela e 70% dos dias registrados. Senão, a resposta diz o que falta. Substitui fórmulas de gasto basal (que pediriam idade, sexo e altura) porque mede o próprio usuário.
+- **Proteína por kg:** média de proteína do período ÷ tendência de peso atual.
+- **Simulação:** `simular_refeicao` calcula itens hipotéticos sobre o dia (macros, dia depois, restante, se fica na meta) sem registrar. É o que deixa as sugestões do Nutri determinísticas: ele propõe e ajusta os gramas, o `core` faz a conta.
+- **Meta de cada dia:** a aderência usa a meta vigente naquele dia, não a atual. Dias anteriores à primeira meta ficam fora da aderência.
+- **Gráficos da aba Resumo:** HTML e SVG montados no servidor, sem biblioteca de JS. Cada gráfico tem uma série só (kcal por dia com a linha da meta; tendência de peso com os pontos das pesagens), dica nativa (`title`) ao passar o dedo ou o mouse, e a tabela dos dias para quem não lê o gráfico.
+- **Cores dos macros:** azul (P), laranja (C) e verde-água (G), da paleta de referência da skill de visualização, validadas para daltonismo no claro e no escuro. As antigas (verde e laranja do tema) falhavam.
 
 ## 6. Ferramentas MCP
 
@@ -136,13 +157,13 @@ Conjunto pequeno e bem escolhido (lição do Karakeep), com a escrita sob contro
 |---|---|
 | 2 | `buscar_alimento`, `registrar_refeicao` (vários itens), `editar_lancamento`, `remover_lancamento`, `desfazer`, `resumo_dia`, `definir_porcao`, `metas`, `definir_metas` |
 | 3 | `criar_receita`, `editar_receita`, `listar_receitas`, `criar_alimento` |
-| 4 | `historico(periodo)`, `registrar_peso` + prompts `revisao_semanal`, `sugerir_refeicao` |
+| 4 | `analise_periodo`, `peso` (tendência e TDEE), `simular_refeicao`, `registrar_peso` + prompts `revisao_semanal`, `sugerir_refeicao` |
 
 - A flag `--read-only` expõe só as ferramentas de leitura (`buscar_alimento`, `resumo_dia`, `metas`, `listar_receitas`).
 - `editar_receita` entrou porque a marmita se repete com outras quantidades, e `criar_alimento` resolve os produtos fora da TACO. `editar_receita` recebe a receita inteira, para não ter regras de mescla.
 - As saídas são JSON estruturado. `buscar_alimento` já traz as porções salvas, e `registrar_refeicao` devolve os lançamentos e o resumo do dia, para o Nutri responder sem outra chamada.
 - Datas em `AAAA-MM-DD`; sem data, vale hoje.
-- Os atalhos da web ("Resumo de hoje", "O que janto?", "Desfazer último") hoje só mandam texto pronto. Quando os prompts da fase 4 existirem, "Resumo da semana" e "O que janto?" passam a usá-los.
+- Os atalhos "Revisão da semana" e "O que eu como?" da web (e o botão da aba Resumo) mandam `/mcp__nutri__revisao_semanal` e `/mcp__nutri__sugerir_refeicao <refeição>`: o `claude -p` expande os prompts do MCP como comandos. A bolha mostra o rótulo. Esses comandos vão sem o prefixo `[agora: ...]`, que os quebraria; o texto digitado sempre leva o prefixo, então nunca vira comando.
 
 ## 7. O Nutri
 
@@ -150,6 +171,7 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - Sempre usar `buscar_alimento` antes de registrar, preferindo os itens da TACO.
 - Usar as porções salvas do usuário. Quando estimar, marcar `estimado`.
 - Depois de registrar, mostrar o resumo do dia comparado com a meta.
+- Não calcular médias, porcentagens nem TDEE: usar os números de `resumo_dia`, `analise_periodo` e `peso`.
 - Nunca remover sem confirmação.
 - Responder em português, de forma curta e em texto simples (a web não renderiza markdown).
 
@@ -180,7 +202,7 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - [x] **1. Núcleo**: estrutura do projeto, schema e migrations, seed da TACO, diário e metas na web, PWA, senha
 - [x] **2. Nutri**: `rango mcp` (stdio), chat via `claude -p` com streaming, cartões de lançamento com desfazer
 - [x] **3. Receitas e marmitas**: alimento composto, rendimento, porções
-- [ ] **4. Planejar e analisar**: histórico, peso, revisão semanal, sugestões
+- [x] **4. Planejar e analisar**: análise determinística no `core` (fibra, distribuição de energia, médias e aderência por período, tendência de peso, TDEE adaptativo), peso, aba Resumo, prompts de revisão semanal e sugestão
 
 ## 10. Em aberto
 
@@ -193,3 +215,6 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - Guardar o histórico do chat no banco, para sobreviver a reinícios do servidor (hoje fica na memória).
 - Regerar o subconjunto do Material Symbols com `send` e outros ícones; falta a fonte completa no repositório ou um passo no `make`.
 - Um cartão de registro continua com "Desfazer" mesmo se o Nutri já desfez aquele registro. Clicar não estraga nada, mas confunde.
+- "Dia registrado" é ter um lançamento. Um dia anotado pela metade puxa a média e o TDEE para baixo. Avaliar marcar o dia como completo, ou ignorar dias muito abaixo da média.
+- Plano da semana e lista de compras (seção 2) ainda não existem. Dá para montar em cima de `simular_refeicao` e das receitas.
+- Apagar uma pesagem pela web ou pelo Nutri (o `core` já tem `RemoverPeso`; hoje só dá para substituir a do dia).
