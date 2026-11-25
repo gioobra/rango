@@ -110,9 +110,6 @@ func (s *Servidor) carregarTemplates() error {
 			}
 			return map[string]float64{"prot": m.Prot, "carb": m.Carb, "gord": m.Gord}[campo]
 		},
-		"rankingDe": func(titulo, unidade string, itens []core.ItemRanking) map[string]any {
-			return map[string]any{"Titulo": titulo, "Unidade": unidade, "Itens": itens}
-		},
 		"dataDe": func(v string) time.Time {
 			t, _ := time.ParseInLocation(core.FormatoData, v, time.Local)
 			return t

@@ -147,7 +147,8 @@ Toda métrica é calculada no `core`, testada e devolvida pronta. O Nutri não f
 - **Simulação:** `simular_refeicao` calcula itens hipotéticos sobre o dia (macros, dia depois, restante, se fica na meta) sem registrar. É o que deixa as sugestões do Nutri determinísticas: ele propõe e ajusta os gramas, o `core` faz a conta.
 - **Meta de cada dia:** a aderência usa a meta vigente naquele dia, não a atual. Dias anteriores à primeira meta ficam fora da aderência.
 - **Gráficos da aba Resumo:** HTML e SVG montados no servidor, sem biblioteca de JS. Cada gráfico tem uma série só (kcal por dia com a linha da meta; tendência de peso com os pontos das pesagens), dica nativa (`title`) ao passar o dedo ou o mouse, e a tabela dos dias para quem não lê o gráfico.
-- **Cores dos macros:** azul (P), laranja (C) e verde-água (G), da paleta de referência da skill de visualização, validadas para daltonismo no claro e no escuro. As antigas (verde e laranja do tema) falhavam.
+- **Cores dos macros:** azul (P), laranja (C) e verde-água (G), da paleta de referência da skill de visualização, validadas para daltonismo no claro e no escuro. As antigas (verde e laranja do tema) falhavam. Os dois design systems do Stitch (claro e escuro) descrevem essa paleta, para que telas novas geradas lá não voltem às cores antigas.
+- **Layout da aba Resumo:** redesenhado a partir de variantes geradas no Stitch. A média de kcal virou o número principal, junto com a cobertura. Proteína e aderência aparecem em cartões menores, com selos ("na meta", "quase lá", "abaixo"). A faixa de ±10% sai de `core.FaixaKcal`, a mesma regra da aderência. O "quase lá" (≥ 90% da meta de proteína) é só um rótulo e não muda a aderência. No gráfico de kcal, cada barra mostra o valor (até 7 dias) e o dia de hoje fica destacado. O top 5 tem duas abas (calorias e proteína), feitas só com CSS (rádios e `:has`), sem JS.
 
 ## 6. Ferramentas MCP
 

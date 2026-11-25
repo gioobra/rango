@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gioobra/rango/internal/core"
 )
@@ -17,9 +18,11 @@ var periodos = []int{7, 14, 30}
 type barraDia struct {
 	Rotulo     string // "Seg"
 	Dica       string // tooltip
+	Valor      string // kcal escrita em cima da barra
 	Altura     float64
 	Registrado bool
 	Acima      bool // acima da faixa de ±10% da meta
+	Hoje       bool
 }
 
 // graficoKcal guarda a geometria do gráfico de kcal por dia.
@@ -28,12 +31,14 @@ type graficoKcal struct {
 	MetaPct  float64 // altura da linha da meta; 0 sem meta
 	Escala   float64 // kcal no topo
 	Rotular  bool    // cabe rótulo de dia embaixo de cada barra
-	TemAcima bool    // alguma barra passou da faixa da meta (mostra a legenda)
+	Valores  bool    // cabe o valor em cima de cada barra
+	TemHoje  bool
+	TemAcima bool // alguma barra passou da faixa da meta (mostra a legenda)
 	MetaKcal float64
 }
 
-func montarGraficoKcal(a core.Analise) graficoKcal {
-	g := graficoKcal{Rotular: len(a.PorDia) <= 14}
+func montarGraficoKcal(a core.Analise, hoje time.Time) graficoKcal {
+	g := graficoKcal{Rotular: len(a.PorDia) <= 14, Valores: len(a.PorDia) <= 7}
 	maior := 0.0
 	for _, d := range a.PorDia {
 		maior = math.Max(maior, d.Totais.Kcal)
@@ -46,16 +51,21 @@ func montarGraficoKcal(a core.Analise) graficoKcal {
 		maior = 2000
 	}
 	g.Escala = maior * 1.1
+	if g.Valores { // folga para o número em cima da barra mais alta
+		g.Escala = maior * 1.2
+	}
 	if a.Meta != nil {
 		g.MetaPct = a.Meta.Kcal / g.Escala * 100
 	}
 	for _, d := range a.PorDia {
 		b := barraDia{Rotulo: diasCurtos[d.Data.Weekday()], Registrado: d.Registrado,
-			Altura: d.Totais.Kcal / g.Escala * 100}
+			Altura: d.Totais.Kcal / g.Escala * 100, Hoje: d.Data.Equal(hoje)}
+		g.TemHoje = g.TemHoje || b.Hoje
 		dia := fmt.Sprintf("%s %02d/%02d", diasCurtos[d.Data.Weekday()], d.Data.Day(), d.Data.Month())
 		if d.Registrado {
 			b.Dica = fmt.Sprintf("%s: %s kcal · P %s g", dia, num(d.Totais.Kcal), dec(d.Totais.Prot))
-			b.Acima = d.Meta != nil && d.Totais.Kcal > d.Meta.Kcal*(1+core.MargemMeta)
+			b.Valor = num(d.Totais.Kcal)
+			b.Acima = d.Meta != nil && d.Meta.Kcal > 0 && core.FaixaKcal(d.Totais.Kcal, d.Meta.Kcal) == 1
 			g.TemAcima = g.TemAcima || b.Acima
 		} else {
 			b.Dica = dia + ": sem registro"
@@ -63,6 +73,69 @@ func montarGraficoKcal(a core.Analise) graficoKcal {
 		g.Barras = append(g.Barras, b)
 	}
 	return g
+}
+
+// selo é a etiqueta de status de um número do resumo. Tom: "ok", "quase" ou "fora".
+type selo struct {
+	Texto, Tom string
+}
+
+// avaliacao compara as médias do período com a meta vigente no fim dele.
+type avaliacao struct {
+	TemMeta bool
+	DifKcal string // "−855 kcal": média menos a meta
+	Kcal    selo
+	Prot    selo
+}
+
+func avaliar(a core.Analise) avaliacao {
+	m := a.Meta
+	if m == nil || m.Kcal <= 0 || a.DiasRegistrados == 0 {
+		return avaliacao{}
+	}
+	av := avaliacao{TemMeta: true}
+	dif := a.Media.Kcal - m.Kcal
+	av.DifKcal = num(math.Abs(dif)) + " kcal"
+	if math.Round(dif) < 0 {
+		av.DifKcal = "−" + av.DifKcal
+	} else if math.Round(dif) > 0 {
+		av.DifKcal = "+" + av.DifKcal
+	}
+	av.Kcal = map[int]selo{-1: {"abaixo da meta", "fora"}, 0: {"na meta", "ok"}, 1: {"acima da meta", "fora"}}[core.FaixaKcal(a.Media.Kcal, m.Kcal)]
+	av.Kcal.Texto = av.DifKcal + " · " + av.Kcal.Texto
+	switch {
+	case m.Prot <= 0:
+	case a.Media.Prot >= m.Prot:
+		av.Prot = selo{"na meta", "ok"}
+	case a.Media.Prot >= m.Prot*0.9: // só o rótulo; a aderência continua sendo ≥ meta
+		av.Prot = selo{"quase lá", "quase"}
+	default:
+		av.Prot = selo{"abaixo", "fora"}
+	}
+	return av
+}
+
+// ranking é uma lista do top 5, com a barra de cada item proporcional ao primeiro.
+type ranking struct {
+	Unidade, Cor string
+	Itens        []itemRanking
+}
+
+type itemRanking struct {
+	Nome       string
+	Total, Pct float64
+}
+
+func montarRanking(unidade, cor string, itens []core.ItemRanking) ranking {
+	r := ranking{Unidade: unidade, Cor: cor}
+	for _, it := range itens {
+		pct := 0.0
+		if itens[0].Total > 0 {
+			pct = it.Total / itens[0].Total * 100
+		}
+		r.Itens = append(r.Itens, itemRanking{Nome: it.Nome, Total: it.Total, Pct: pct})
+	}
+	return r
 }
 
 // graficoPeso é a linha da tendência e os pontos das pesagens, num SVG de 300 × 100.
@@ -135,7 +208,8 @@ func (s *Servidor) resumo(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, http.StatusOK, "resumo", "pagina", map[string]any{
 		"Titulo": "Resumo", "Aba": "resumo", "Dias": dias, "Periodos": periodos,
-		"A": a, "Kcal": montarGraficoKcal(a), "Peso": p, "GraficoPeso": montarGraficoPeso(p.Serie),
+		"A": a, "Kcal": montarGraficoKcal(a, hoje), "Aval": avaliar(a), "Peso": p,
+		"TopKcal": montarRanking("kcal", "bg-primary", a.TopKcal), "TopProt": montarRanking("g", "bg-prot", a.TopProt), "GraficoPeso": montarGraficoPeso(p.Serie),
 		"Hoje": hoje, "ErroPeso": r.URL.Query().Get("erro"),
 	})
 }

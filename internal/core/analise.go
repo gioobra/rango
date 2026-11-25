@@ -51,10 +51,21 @@ type DiaDoPeriodo struct {
 	KcalEstimada float64     // kcal de quantidades estimadas
 }
 
+// FaixaKcal compara kcal com a meta: -1 abaixo, 0 a até ±10% dela, 1 acima.
+func FaixaKcal(kcal, meta float64) int {
+	switch {
+	case math.Abs(kcal-meta) <= meta*MargemMeta:
+		return 0
+	case kcal < meta:
+		return -1
+	default:
+		return 1
+	}
+}
+
 // NaMetaKcal diz se o dia ficou a até ±10% da meta de kcal.
 func (d DiaDoPeriodo) NaMetaKcal() bool {
-	return d.Registrado && d.Meta != nil && d.Meta.Kcal > 0 &&
-		math.Abs(d.Totais.Kcal-d.Meta.Kcal) <= d.Meta.Kcal*MargemMeta
+	return d.Registrado && d.Meta != nil && d.Meta.Kcal > 0 && FaixaKcal(d.Totais.Kcal, d.Meta.Kcal) == 0
 }
 
 // ProteinaOK diz se o dia bateu a meta de proteína.
