@@ -57,6 +57,7 @@ Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`,
 - **Tipografia e ícones:** Plus Jakarta Sans e Material Symbols Outlined.
 - **Identidade:** o ícone do app é um robozinho nutricionista com uma folha, usado também como avatar do Nutri. O app não usa fotos de pessoas nem de comida.
 - **Adaptação para os templates:** o HTML do Stitch é só referência, porque puxa Tailwind por CDN, fontes do Google Fonts e imagens do `googleusercontent`. Os templates reescrevem as telas com os mesmos tokens, e tudo isso fica embutido no binário (ver Princípios na seção 4). O robô virou o ícone do PWA e o avatar (`nutri.png`); o logo do Stitch foi trocado pelo ícone `nutrition`.
+- **Iteração pelo Claude Code:** o Stitch MCP e as skills `google-labs-code/stitch-skills` ficam no escopo do usuário, não no repositório. As telas reais vão para o projeto do Stitch como HTML autossuficiente (página logada, com CSS, fontes e imagens embutidos), e as variantes geradas lá servem de referência para reescrever os templates. Foi assim que o Resumo foi refeito (seção 5). O Astryx (Meta) foi avaliado e descartado, porque exige React e build de JS.
 
 ## 4. Arquitetura e organização
 
@@ -219,6 +220,9 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - "Dia registrado" é ter um lançamento. Um dia anotado pela metade puxa a média e o TDEE para baixo. Avaliar marcar o dia como completo, ou ignorar dias muito abaixo da média.
 - Plano da semana e lista de compras (seção 2) ainda não existem. Dá para montar em cima de `simular_refeicao` e das receitas.
 - Apagar uma pesagem pela web ou pelo Nutri (o `core` já tem `RemoverPeso`; hoje só dá para substituir a do dia).
+- Na busca, nomes curtos ganham: "frango" traz "Frango, com açafrão" e "Salpicão" antes do peito grelhado. Avaliar pesar os alimentos mais usados pelo usuário.
+- A tela Adicionar fica vazia antes de buscar. Mostrar recentes ou mais usados da refeição pede uma consulta nova no `core`.
+- Em tela larga, o gráfico de peso fica estreito e centralizado (o SVG mantém a proporção), e os rótulos do eixo se afastam dele. No celular fica certo.
 - Microanimações, só com CSS e o que o htmx já tem: troca de abas e de páginas com View Transitions (`@view-transition` entre páginas e `transition:true` nas trocas do htmx), entrada de lançamentos e cartões do chat com `@starting-style` e resposta ao toque (`:active` com leve escala). Tudo desligado com `prefers-reduced-motion`.
 
 ## 11. Ideias

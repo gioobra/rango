@@ -45,7 +45,7 @@ Abra `http://127.0.0.1:8080`, entre com a senha, defina as metas no ícone do ro
 
 Na aba Receitas, cadastre a panela (ingredientes crus, peso pronto se pesou e em quantas porções rendeu) e registre cada marmita com um toque. Pelo chat também funciona: "fiz 4 marmitas com 500 g de frango e 600 g de batata" e, depois, "comi uma marmita". Produtos fora da TACO podem ser cadastrados pelo Nutri com os valores do rótulo.
 
-Na aba Resumo, escolha 7, 14 ou 30 dias para ver dias anotados, médias, aderência à meta, de onde vêm as calorias, fibra, refeições e os alimentos que mais pesaram. Registre o peso de manhã no mesmo lugar: com 14 dias de pesagem e a maior parte dos dias anotada, aparece o gasto diário estimado (TDEE). O botão "Revisão da semana com o Nutri" e os atalhos do chat pedem ao Nutri uma revisão ou sugestões de refeição, sempre com os números calculados pelo app.
+Na aba Resumo, escolha 7, 14 ou 30 dias para ver dias anotados, médias, aderência à meta, de onde vêm as calorias, fibra, refeições e os 5 alimentos que mais trouxeram calorias ou proteína. Registre o peso de manhã no mesmo lugar: com 14 dias de pesagem e a maior parte dos dias anotada, aparece o gasto diário estimado (TDEE). O botão "Revisão da semana com o Nutri" e os atalhos do chat pedem ao Nutri uma revisão ou sugestões de refeição, sempre com os números calculados pelo app.
 
 ### MCP em outros clientes
 
@@ -68,7 +68,7 @@ make test lint   # testes e lint, antes de cada commit
 make css         # regera internal/web/static/app.css (versionado)
 ```
 
-As telas de referência, exportadas do Google Stitch, ficam em `design/stitch/`. Abra qualquer `code.html` no navegador para ver.
+As telas de referência, exportadas do Google Stitch, ficam em `design/stitch/`. Abra qualquer `code.html` no navegador para ver. Para gerar telas novas pelo Claude Code, configure o [Stitch MCP](https://stitch.withgoogle.com/docs/mcp/setup/) e instale as skills no seu usuário: `npx plugins add google-labs-code/stitch-skills --scope user --target claude-code`.
 
 ## Dados
 
