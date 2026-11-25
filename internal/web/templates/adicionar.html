@@ -44,7 +44,7 @@
     {{range .Resultados}}
     <li>
       <button type="button" class="w-full flex items-center gap-3 bg-card rounded-2xl px-4 py-3 shadow-sm text-left"
-        hx-get="/adicionar/alimento/{{.ID}}?data={{iso $data}}&refeicao={{$ref}}" hx-target="closest li" hx-swap="innerHTML">
+        hx-get="/adicionar/alimento/{{.ID}}?data={{iso $data}}&refeicao={{$ref}}" hx-target="closest li" hx-swap="innerHTML show:bottom">
         <div class="flex-1 min-w-0">
           <p class="text-sm font-semibold">{{.Nome}}
             {{if eq .Fonte "taco"}}<span class="ml-1 px-1.5 rounded-md bg-secondary-container text-on-secondary-container text-[10px] font-bold align-middle">TACO</span>
@@ -120,10 +120,10 @@
     <span><span class="text-[28px] font-extrabold text-primary">{{num .Macros.Kcal}}</span> <span class="text-xs font-semibold">kcal</span></span>
   </div>
   <div class="grid grid-cols-4 gap-2">
-    {{template "macro" (barraDe "Prot" "bg-tertiary-container" .Macros.Prot 0)}}
-    {{template "macro" (barraDe "Carb" "bg-primary" .Macros.Carb 0)}}
-    {{template "macro" (barraDe "Gord" "bg-tertiary" .Macros.Gord 0)}}
-    {{template "macro" (barraDe "Fibra" "bg-secondary-container" .Macros.Fibra 0)}}
+    {{template "macro" (barraDe "Prot" "bg-prot" .Macros.Prot 0)}}
+    {{template "macro" (barraDe "Carb" "bg-carb" .Macros.Carb 0)}}
+    {{template "macro" (barraDe "Gord" "bg-gord" .Macros.Gord 0)}}
+    {{template "macro" (barraDe "Fibra" "bg-outline" .Macros.Fibra 0)}}
   </div>
 </div>
 {{end}}

@@ -1,7 +1,7 @@
 {{define "conteudo"}}
 {{template "topo"}}
 {{$d := .Dia}}
-<main class="max-w-xl mx-auto px-5 pb-32 space-y-4">
+<main class="max-w-xl mx-auto px-5 pb-44 space-y-4">
 
   <section class="flex items-center justify-between bg-card p-1 rounded-full shadow-sm">
     <a href="/diario?data={{iso (diaMais $d.Data -1)}}" aria-label="Dia anterior" class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-surface-container">
@@ -83,7 +83,7 @@
       {{range .Itens}}
       <li class="flex items-center gap-3 px-5 py-2.5">
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium truncate">{{.AlimentoNome}}
+          <p class="text-sm font-medium leading-snug line-clamp-2">{{.AlimentoNome}}
             {{if .Estimado}}<span class="ml-1 px-1.5 rounded-md bg-tertiary-container/20 text-tertiary text-[10px] font-bold align-middle">estimado</span>{{end}}
           </p>
           <p class="text-xs text-on-surface-variant">{{dec .Gramas}} g · P {{dec .Prot}} · C {{dec .Carb}} · G {{dec .Gord}}</p>
