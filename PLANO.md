@@ -218,6 +218,7 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - "Dia registrado" é ter um lançamento. Um dia anotado pela metade puxa a média e o TDEE para baixo. Avaliar marcar o dia como completo, ou ignorar dias muito abaixo da média.
 - Plano da semana e lista de compras (seção 2) ainda não existem. Dá para montar em cima de `simular_refeicao` e das receitas.
 - Apagar uma pesagem pela web ou pelo Nutri (o `core` já tem `RemoverPeso`; hoje só dá para substituir a do dia).
+- Microanimações, só com CSS e o que o htmx já tem: troca de abas e de páginas com View Transitions (`@view-transition` entre páginas e `transition:true` nas trocas do htmx), entrada de lançamentos e cartões do chat com `@starting-style` e resposta ao toque (`:active` com leve escala). Tudo desligado com `prefers-reduced-motion`.
 
 ## 11. Ideias
 
@@ -229,12 +230,16 @@ Evoluções pensadas para facilitar o self-hosting e permitir rodar o Nutri sem 
 - **Reaproveitamento do MCP em memória:** o backend de API conecta-se diretamente ao `mcp.Novo(...)` no mesmo processo via `InMemoryTransport` do `modelcontextprotocol/go-sdk`. `ListTools` alimenta as ferramentas da API, `CallTool` executa no `core` emitindo os mesmos eventos (`Ferramenta` e `Resultado`, preservando os cartões com "Desfazer" sem alterar `internal/web/chat.go`), e `GetPrompt` expande os atalhos (`revisao_semanal`, `sugerir_refeicao`).
 - **Configuração por ambiente:** `RANGO_LLM_URL`, `RANGO_LLM_MODEL` e `RANGO_LLM_KEY` (opcional). Quando `RANGO_LLM_MODEL` está definido, o servidor usa o backend de API — compatível com Ollama local (gratuito), Gemini, Groq, OpenRouter, LM Studio e OpenAI.
 - **Sessão e limites:** histórico da conversa mantido em memória por sessão (alinhado ao comportamento atual do chat) e limite de iterações de tool calls por turno.
+- **Atalhos sem o `claude -p`:** quem expande `/mcp__nutri__<prompt> <args>` hoje é o `claude -p`. No backend de API, o `internal/agent` detecta o prefixo e chama `GetPrompt`, e `internal/web/chat.go` não muda.
+- **Segurança:** as flags do `claude -p` (seção 8) não se aplicam aqui, mas não fazem falta. O modelo só enxerga as ferramentas do `mcp.Novo(...)` em memória, sem Bash, arquivos ou web. A `--read-only` continua valendo.
+- **Modelos locais:** o `nutri.txt` foi afinado para o Claude. Modelos pequenos erram chamadas de ferramenta ou fazem conta por conta própria, então o README deve indicar um modelo mínimo testado.
 - **Testes sem chave real:** `httptest.Server` simulando streaming SSE e chamadas de ferramenta contra o MCP em memória e SQLite temporário.
 
 ### Docker e self-hosting
 - **Rede configurável via ambiente:** manter `ValidarEndereco` restrito a `localhost` e Tailscale por padrão, adicionando opt-in via `RANGO_PERMITIR_EXTERNO=1` para liberar bind em `0.0.0.0` dentro de containers sem exigir flags extras no CLI.
 - **Imagem enxuta (`Dockerfile` + `.dockerignore`):** build multi-stage (`CGO_ENABLED=0`) gerando imagem final em `gcr.io/distroless/static-debian12:nonroot` (~20 MB, com CA certs para chamadas HTTPS às APIs de LLM e sem Node/Tailwind no build porque `app.css` já é versionado).
-- **`docker-compose.yml`:** exemplo pronto com volume persistente em `/data` (`RANGO_DB=/data/rango.db`) e variáveis comentadas para Ollama no host (`http://host.docker.internal:11434/v1`) ou API externa.
+- **Só com o backend de API:** a imagem distroless não tem o `claude` nem Node, então no container o Nutri depende de `RANGO_LLM_MODEL`. Sem ele, a web sobe sem chat.
+- **`docker-compose.yml`:** exemplo pronto com volume persistente em `/data` (`RANGO_DB=/data/rango.db`) e variáveis comentadas para Ollama no host (`http://host.docker.internal:11434/v1`) ou API externa. A porta é publicada só em `127.0.0.1:8080:8080`, ou por um sidecar da Tailscale, para que o `RANGO_PERMITIR_EXTERNO` valha só dentro do container e o app continue fora da rede do host (seção 8).
 
 ### Licença
 - Código licenciado sob **MIT** (`LICENSE`), compatível com todas as dependências e assets embutidos; dados da TACO, fontes e bibliotecas mantêm suas atribuições no `README.md`.
