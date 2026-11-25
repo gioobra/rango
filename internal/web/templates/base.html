@@ -60,3 +60,38 @@ function definirGramas(botao, g) {
   {{.Nome}}
 </a>
 {{end}}
+
+
+{{/* Distribuição de energia (4/4/9): barra empilhada com rótulos diretos. */}}
+{{define "energia"}}
+{{if or .Prot .Carb .Gord}}
+<div class="mt-4">
+  <p class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant mb-1.5">De onde vêm as calorias</p>
+  <div class="flex h-2.5 gap-0.5 rounded-full overflow-hidden" role="img"
+       aria-label="Proteína {{dec .Prot}}%, carboidrato {{dec .Carb}}%, gordura {{dec .Gord}}%">
+    <div class="bg-prot" style="width: {{.Prot}}%" title="Proteína {{dec .Prot}}%"></div>
+    <div class="bg-carb" style="width: {{.Carb}}%" title="Carboidrato {{dec .Carb}}%"></div>
+    <div class="bg-gord" style="width: {{.Gord}}%" title="Gordura {{dec .Gord}}%"></div>
+  </div>
+  <div class="flex justify-between text-[11px] mt-1.5 text-on-surface-variant">
+    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-prot"></span>P <b class="text-on-surface">{{dec .Prot}}%</b></span>
+    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-carb"></span>C <b class="text-on-surface">{{dec .Carb}}%</b></span>
+    <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-gord"></span>G <b class="text-on-surface">{{dec .Gord}}%</b></span>
+  </div>
+</div>
+{{end}}
+{{end}}
+
+{{/* Barra de um macro contra a meta. */}}
+{{define "barra"}}
+<div>
+  <div class="flex justify-between items-center mb-1 text-xs">
+    <span class="font-semibold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full {{.Cor}}"></span>{{.Nome}}</span>
+    {{if .Meta}}<span class="font-bold">{{num .Valor}} <span class="font-normal text-on-surface-variant">/ {{num .Meta}} g</span></span>
+    {{else}}<span class="font-bold">{{num .Valor}} g</span>{{end}}
+  </div>
+  <div class="w-full h-2 rounded-full bg-surface-container overflow-hidden">
+    <div class="h-full rounded-full {{.Cor}}" style="width: {{pct .Valor .Meta}}%"></div>
+  </div>
+</div>
+{{end}}

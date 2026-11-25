@@ -22,6 +22,7 @@ func Novo(svc *core.Servico, versao string, somenteLeitura bool) *sdk.Server {
 	s := sdk.NewServer(&sdk.Implementation{Name: "rango", Version: versao},
 		&sdk.ServerOptions{Instructions: instrucoes, Capabilities: &sdk.ServerCapabilities{}})
 	f := &ferramentas{svc: svc}
+	adicionarPrompts(s)
 
 	leitura := &sdk.ToolAnnotations{ReadOnlyHint: true}
 	sdk.AddTool(s, &sdk.Tool{Name: "buscar_alimento", Annotations: leitura,
@@ -35,6 +36,19 @@ func Novo(svc *core.Servico, versao string, somenteLeitura bool) *sdk.Server {
 		Description: "Receitas e marmitas salvas, com ingredientes, rendimento, porção e macros da porção. " +
 			"Para registrar, use o id da receita como alimento_id em registrar_refeicao."},
 		f.listarReceitas)
+	sdk.AddTool(s, &sdk.Tool{Name: "analise_periodo", Annotations: leitura,
+		Description: "Análise calculada pelo Rango de um período (padrão: 7 dias até hoje): cobertura, médias diárias, " +
+			"desvio, distribuição de energia, aderência à meta, peso de cada refeição, alimentos que mais pesaram, " +
+			"fatia estimada e proteína por kg. Use estes números em vez de calcular."},
+		f.analisePeriodo)
+	sdk.AddTool(s, &sdk.Tool{Name: "peso", Annotations: leitura,
+		Description: "Pesagens, tendência de peso (média móvel exponencial), variação por semana e o TDEE adaptativo " +
+			"(gasto diário estimado pelo balanço entre o que se comeu e a tendência). Sem dados suficientes, diz o que falta."},
+		f.peso)
+	sdk.AddTool(s, &sdk.Tool{Name: "simular_refeicao", Annotations: leitura,
+		Description: "Calcula, sem registrar, os macros de itens hipotéticos e como o dia fecharia contra a meta. " +
+			"Use para montar sugestões com quantidades: ajuste os gramas e simule de novo até fechar."},
+		f.simular)
 	sdk.AddTool(s, &sdk.Tool{Name: "metas", Annotations: leitura,
 		Description: "Meta diária vigente na data (kcal e gramas de proteína, carboidrato e gordura)."},
 		f.metas)
@@ -77,6 +91,9 @@ func Novo(svc *core.Servico, versao string, somenteLeitura bool) *sdk.Server {
 		Description: "Cadastra um alimento que não existe na TACO, com valores por 100 g (de um rótulo, por exemplo). " +
 			"Se o rótulo dá os valores por porção, converta para 100 g antes."},
 		f.criarAlimento)
+	sdk.AddTool(s, &sdk.Tool{Name: "registrar_peso", Annotations: &sdk.ToolAnnotations{DestructiveHint: new(false), IdempotentHint: true},
+		Description: "Registra a pesagem do dia em kg. Pesar de novo no mesmo dia substitui."},
+		f.registrarPeso)
 	return s
 }
 
@@ -117,15 +134,27 @@ type Refeicao struct {
 
 // Dia resumido.
 type Dia struct {
-	Data      string      `json:"data"`
-	Refeicoes []Refeicao  `json:"refeicoes"`
-	Totais    Nutrientes  `json:"totais"`
-	Meta      *Nutrientes `json:"meta,omitempty"`
-	Restante  *Nutrientes `json:"restante,omitempty"`
+	Data         string       `json:"data"`
+	Refeicoes    []Refeicao   `json:"refeicoes"`
+	Totais       Nutrientes   `json:"totais"`
+	Distribuicao Distribuicao `json:"distribuicao_energia"`
+	Meta         *Nutrientes  `json:"meta,omitempty"`
+	Restante     *Nutrientes  `json:"restante,omitempty"`
 }
 
 func deTotais(t core.Totais) Nutrientes {
-	return Nutrientes{Kcal: t.Kcal, Prot: t.Prot, Carb: t.Carb, Gord: t.Gord}
+	return Nutrientes{Kcal: t.Kcal, Prot: t.Prot, Carb: t.Carb, Gord: t.Gord, Fibra: t.Fibra}
+}
+
+// Distribuicao é a % das kcal vinda de cada macro (4/4/9 kcal por grama).
+type Distribuicao struct {
+	Prot float64 `json:"prot_pct"`
+	Carb float64 `json:"carb_pct"`
+	Gord float64 `json:"gord_pct"`
+}
+
+func deDistribuicao(d core.Distribuicao) Distribuicao {
+	return Distribuicao{Prot: d.Prot, Carb: d.Carb, Gord: d.Gord}
 }
 
 func deMeta(m store.Meta) *Nutrientes {
@@ -133,7 +162,8 @@ func deMeta(m store.Meta) *Nutrientes {
 }
 
 func deDia(d core.Dia) Dia {
-	out := Dia{Data: d.Data.Format(core.FormatoData), Totais: deTotais(d.Totais), Refeicoes: []Refeicao{}}
+	out := Dia{Data: d.Data.Format(core.FormatoData), Totais: deTotais(d.Totais), Refeicoes: []Refeicao{},
+		Distribuicao: deDistribuicao(core.DistribuicaoDe(d.Totais))}
 	for _, r := range d.Refeicoes {
 		if len(r.Itens) == 0 {
 			continue

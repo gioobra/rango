@@ -258,14 +258,3 @@ func (s *Servidor) salvarMetas(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, "/metas?salvo", http.StatusSeeOther)
 }
-
-func (s *Servidor) emBreve(aba string) http.HandlerFunc {
-	nomes := map[string][2]string{
-		"resumo": {"Resumo", "Histórico e revisão semanal chegam na fase 4."},
-	}
-	return func(w http.ResponseWriter, r *http.Request) {
-		s.render(w, http.StatusOK, "embreve", "pagina", map[string]any{
-			"Titulo": nomes[aba][0], "Aba": aba, "Texto": nomes[aba][1],
-		})
-	}
-}

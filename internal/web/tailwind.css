@@ -28,6 +28,11 @@
   --color-inverse-surface: #213145;
   --color-inverse-on-surface: #eaf1ff;
   --color-inverse-primary: #62df7d;
+
+  /* Macros nos gráficos: paleta validada para daltonismo (skill dataviz), claro e escuro. */
+  --color-prot: #2a78d6;
+  --color-carb: #eb6834;
+  --color-gord: #1baf7a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -54,6 +59,9 @@
     --color-inverse-surface: #e2e2e6;
     --color-inverse-on-surface: #2f3033;
     --color-inverse-primary: #006b2c;
+    --color-prot: #3987e5;
+    --color-carb: #d95926;
+    --color-gord: #199e70;
   }
 }
 

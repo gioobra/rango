@@ -40,6 +40,7 @@ type Lancamento struct {
 	Prot         float64 `json:"prot"`
 	Carb         float64 `json:"carb"`
 	Gord         float64 `json:"gord"`
+	Fibra        float64 `json:"fibra"`
 	Origem       string  `json:"origem"`
 	Estimado     bool    `json:"estimado"`
 	CriadoEm     string  `json:"criado_em"`
@@ -148,12 +149,12 @@ func (r *Repo) SalvarPorcao(ctx context.Context, p Porcao) (Porcao, error) {
 }
 
 const colsLancamento = `l.id, l.data, l.refeicao, l.alimento_id, a.nome, l.gramas, l.kcal, l.prot, l.carb, l.gord,
-	l.origem, l.estimado, l.criado_em, l.removido_em`
+	l.fibra, l.origem, l.estimado, l.criado_em, l.removido_em`
 
 func scanLancamento(sc interface{ Scan(...any) error }) (Lancamento, error) {
 	var l Lancamento
 	err := sc.Scan(&l.ID, &l.Data, &l.Refeicao, &l.AlimentoID, &l.AlimentoNome, &l.Gramas,
-		&l.Kcal, &l.Prot, &l.Carb, &l.Gord, &l.Origem, &l.Estimado, &l.CriadoEm, &l.RemovidoEm)
+		&l.Kcal, &l.Prot, &l.Carb, &l.Gord, &l.Fibra, &l.Origem, &l.Estimado, &l.CriadoEm, &l.RemovidoEm)
 	return l, err
 }
 
@@ -161,9 +162,9 @@ func scanLancamento(sc interface{ Scan(...any) error }) (Lancamento, error) {
 func (r *Repo) InserirLancamento(ctx context.Context, l Lancamento) (int64, error) {
 	var id int64
 	err := r.q.QueryRowContext(ctx, `INSERT INTO lancamentos
-		(data, refeicao, alimento_id, gramas, kcal, prot, carb, gord, origem, estimado, criado_em)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-		l.Data, l.Refeicao, l.AlimentoID, l.Gramas, l.Kcal, l.Prot, l.Carb, l.Gord, l.Origem, l.Estimado, l.CriadoEm,
+		(data, refeicao, alimento_id, gramas, kcal, prot, carb, gord, fibra, origem, estimado, criado_em)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+		l.Data, l.Refeicao, l.AlimentoID, l.Gramas, l.Kcal, l.Prot, l.Carb, l.Gord, l.Fibra, l.Origem, l.Estimado, l.CriadoEm,
 	).Scan(&id)
 	return id, err
 }
@@ -178,16 +179,21 @@ func (r *Repo) Lancamento(ctx context.Context, id int64) (Lancamento, error) {
 // AtualizarLancamento grava todos os campos mutáveis do lançamento.
 func (r *Repo) AtualizarLancamento(ctx context.Context, l Lancamento) error {
 	_, err := r.q.ExecContext(ctx, `UPDATE lancamentos SET data = ?, refeicao = ?, gramas = ?,
-		kcal = ?, prot = ?, carb = ?, gord = ?, estimado = ?, removido_em = ? WHERE id = ?`,
-		l.Data, l.Refeicao, l.Gramas, l.Kcal, l.Prot, l.Carb, l.Gord, l.Estimado, l.RemovidoEm, l.ID)
+		kcal = ?, prot = ?, carb = ?, gord = ?, fibra = ?, estimado = ?, removido_em = ? WHERE id = ?`,
+		l.Data, l.Refeicao, l.Gramas, l.Kcal, l.Prot, l.Carb, l.Gord, l.Fibra, l.Estimado, l.RemovidoEm, l.ID)
 	return err
 }
 
 // LancamentosDoDia lista os lançamentos ativos de uma data, na ordem de registro.
 func (r *Repo) LancamentosDoDia(ctx context.Context, data string) ([]Lancamento, error) {
+	return r.LancamentosEntre(ctx, data, data)
+}
+
+// LancamentosEntre lista os lançamentos ativos de ini a fim (inclusive), por data e ordem de registro.
+func (r *Repo) LancamentosEntre(ctx context.Context, ini, fim string) ([]Lancamento, error) {
 	rows, err := r.q.QueryContext(ctx, `SELECT `+colsLancamento+`
 		FROM lancamentos l JOIN alimentos a ON a.id = l.alimento_id
-		WHERE l.data = ? AND l.removido_em IS NULL ORDER BY l.id`, data)
+		WHERE l.data BETWEEN ? AND ? AND l.removido_em IS NULL ORDER BY l.data, l.id`, ini, fim)
 	if err != nil {
 		return nil, err
 	}
@@ -367,6 +373,62 @@ func (r *Repo) ItensReceita(ctx context.Context, receitaID int64) ([]ItemReceita
 			return nil, err
 		}
 		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// Pesagem do dia.
+type Pesagem struct {
+	Data string
+	Kg   float64
+}
+
+// SalvarPeso grava a pesagem; o mesmo dia é substituído.
+func (r *Repo) SalvarPeso(ctx context.Context, p Pesagem) error {
+	_, err := r.q.ExecContext(ctx, `INSERT INTO peso (data, kg) VALUES (?, ?)
+		ON CONFLICT (data) DO UPDATE SET kg = excluded.kg`, p.Data, p.Kg)
+	return err
+}
+
+// RemoverPeso apaga a pesagem do dia, se existir.
+func (r *Repo) RemoverPeso(ctx context.Context, data string) error {
+	_, err := r.q.ExecContext(ctx, `DELETE FROM peso WHERE data = ?`, data)
+	return err
+}
+
+// PesosAte lista as pesagens até a data (inclusive), da mais antiga para a mais nova.
+func (r *Repo) PesosAte(ctx context.Context, fim string) ([]Pesagem, error) {
+	rows, err := r.q.QueryContext(ctx, `SELECT data, kg FROM peso WHERE data <= ? ORDER BY data`, fim)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Pesagem
+	for rows.Next() {
+		var p Pesagem
+		if err := rows.Scan(&p.Data, &p.Kg); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// MetasAte lista as metas que começaram até a data, da mais antiga para a mais nova.
+func (r *Repo) MetasAte(ctx context.Context, fim string) ([]Meta, error) {
+	rows, err := r.q.QueryContext(ctx, `SELECT vigente_desde, kcal, prot, carb, gord FROM metas
+		WHERE vigente_desde <= ? ORDER BY vigente_desde`, fim)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Meta
+	for rows.Next() {
+		var m Meta
+		if err := rows.Scan(&m.VigenteDesde, &m.Kcal, &m.Prot, &m.Carb, &m.Gord); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
 	}
 	return out, rows.Err()
 }

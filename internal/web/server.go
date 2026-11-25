@@ -14,12 +14,14 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gioobra/rango/internal/agent"
 	"github.com/gioobra/rango/internal/core"
+	"github.com/gioobra/rango/internal/store"
 )
 
 //go:embed templates/*.html
@@ -80,6 +82,37 @@ func (s *Servidor) carregarTemplates() error {
 		"iso":        func(t time.Time) string { return t.Format(core.FormatoData) },
 		"hora":       func(t time.Time) string { return t.Format("15:04") },
 		"campo":      campo,
+		"distrib":    core.DistribuicaoDe,
+		"negrito":    negrito,
+		"dec2":       dec2,
+		"plural": func(n int, um, varios string) string {
+			if n == 1 {
+				return "1 " + um
+			}
+			return strconv.Itoa(n) + " " + varios
+		},
+		"abs": math.Abs,
+		"sinal": func(v float64) string {
+			if v > 0 {
+				return "+" + dec2(v)
+			}
+			return strings.Replace(dec2(v), "-", "−", 1)
+		},
+		"pctNum": func(a, b int) float64 {
+			if b == 0 {
+				return 0
+			}
+			return float64(a) / float64(b) * 100
+		},
+		"metaDe": func(m *store.Meta, campo string) float64 {
+			if m == nil {
+				return 0
+			}
+			return map[string]float64{"prot": m.Prot, "carb": m.Carb, "gord": m.Gord}[campo]
+		},
+		"rankingDe": func(titulo, unidade string, itens []core.ItemRanking) map[string]any {
+			return map[string]any{"Titulo": titulo, "Unidade": unidade, "Itens": itens}
+		},
 		"dataDe": func(v string) time.Time {
 			t, _ := time.ParseInLocation(core.FormatoData, v, time.Local)
 			return t
@@ -172,9 +205,8 @@ func (s *Servidor) Handler() http.Handler {
 	m.HandleFunc("POST /receitas/{id}", s.salvarReceita)
 	m.HandleFunc("GET /ingredientes", s.buscaIngrediente)
 	m.HandleFunc("GET /ingredientes/{id}", s.ingrediente)
-	for _, aba := range []string{"resumo"} {
-		m.HandleFunc("GET /"+aba, s.emBreve(aba))
-	}
+	m.HandleFunc("GET /resumo", s.resumo)
+	m.HandleFunc("POST /peso", s.registrarPeso)
 	return s.exigirLogin(cabecalhos(m))
 }
 
@@ -250,6 +282,13 @@ func dec(v float64) string {
 		return num(v)
 	}
 	return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1)
+}
+
+var marcaNegrito = regexp.MustCompile(`\*\*([^*\n]+)\*\*`)
+
+// negrito escapa o texto e só então troca **x** por <strong>: o único markdown que o chat mostra.
+func negrito(s string) template.HTML {
+	return template.HTML(marcaNegrito.ReplaceAllString(template.HTMLEscapeString(s), "<strong>$1</strong>")) //nolint:gosec // escapado antes
 }
 
 // campo formata para um input de texto: sem separador de milhar e com vírgula, 1100.5 -> "1100,5".

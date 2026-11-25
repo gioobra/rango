@@ -80,9 +80,16 @@ type Evento struct {
 
 var diasSemana = []string{"domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"}
 
+// Comando monta a chamada de um prompt do MCP do Rango ("/mcp__nutri__revisao_semanal").
+// Só o código monta comandos: o texto digitado nunca vira comando, porque leva o prefixo de data.
+func Comando(prompt string, args ...string) string {
+	return strings.Join(append([]string{"/" + prefixo + prompt}, args...), " ")
+}
+
 // Conversar manda a mensagem ao Nutri, continuando a sessão se houver, e chama emitir
-// a cada evento. Devolve o id da sessão para a próxima mensagem.
-func (a *Agente) Conversar(ctx context.Context, sessao, mensagem string, emitir func(Evento)) (string, error) {
+// a cada evento. Devolve o id da sessão para a próxima mensagem. Com comando, a mensagem
+// vai como está (ver Comando).
+func (a *Agente) Conversar(ctx context.Context, sessao, mensagem string, comando bool, emitir func(Evento)) (string, error) {
 	if err := a.Disponivel(); err != nil {
 		return sessao, err
 	}
@@ -98,10 +105,14 @@ func (a *Agente) Conversar(ctx context.Context, sessao, mensagem string, emitir 
 	cmd := exec.CommandContext(ctx, a.cfg.Claude, args...)
 	cmd.Dir = a.cfg.Dir
 	cmd.WaitDelay = 5 * time.Second
-	// A data vai na mensagem porque a conversa atravessa dias.
-	agora := time.Now()
-	cmd.Stdin = strings.NewReader(fmt.Sprintf("[agora: %s, %s %s]\n%s",
-		agora.Format("2006-01-02"), diasSemana[agora.Weekday()], agora.Format("15:04"), mensagem))
+	// A data vai na mensagem porque a conversa atravessa dias. Comandos vão sem prefixo,
+	// senão o claude não os reconhece; os prompts do MCP já pedem os dados de hoje.
+	if !comando {
+		agora := time.Now()
+		mensagem = fmt.Sprintf("[agora: %s, %s %s]\n%s",
+			agora.Format("2006-01-02"), diasSemana[agora.Weekday()], agora.Format("15:04"), mensagem)
+	}
+	cmd.Stdin = strings.NewReader(mensagem)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	saida, err := cmd.StdoutPipe()

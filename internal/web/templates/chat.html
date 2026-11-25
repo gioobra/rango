@@ -36,13 +36,15 @@
 <div class="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 bg-gradient-to-t from-surface via-surface to-surface/0 pt-4 pb-2">
   <div class="max-w-xl mx-auto px-5 space-y-2">
     <div class="flex gap-2 overflow-x-auto -mx-5 px-5">
-      {{template "atalho" (atalhoDe "Resumo de hoje" "analytics" "Como está meu dia hoje em relação à meta?")}}
-      {{template "atalho" (atalhoDe "O que janto?" "dinner_dining" "O que eu janto pra fechar a meta de hoje?")}}
+      {{template "comando" (atalhoDe "Revisão da semana" "analytics" "revisao")}}
+      {{template "comando" (atalhoDe "O que eu como?" "dinner_dining" "sugerir")}}
+      {{template "atalho" (atalhoDe "Resumo de hoje" "calendar_today" "Como está meu dia hoje em relação à meta?")}}
       {{template "atalho" (atalhoDe "Desfazer último" "undo" "Desfaz o último registro.")}}
     </div>
     <form id="form-chat" hx-post="/chat" hx-target="#mensagens" hx-swap="beforeend"
           class="flex items-center gap-2 bg-card p-1.5 pl-4 rounded-full shadow-md">
-      <input name="mensagem" autocomplete="off" required maxlength="4000" placeholder="Fale com o Nutri…" aria-label="Mensagem"
+      <input type="hidden" name="atalho" value="">
+      <input name="mensagem" autocomplete="off" maxlength="4000" placeholder="Fale com o Nutri…" aria-label="Mensagem"
              class="flex-1 min-w-0 bg-transparent text-on-surface placeholder:text-on-surface-variant focus:outline-none" {{if .Turno}}disabled{{end}}>
       <button aria-label="Enviar" class="w-11 h-11 shrink-0 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm active:scale-95 disabled:opacity-50" {{if .Turno}}disabled{{end}}>
         <span class="icone text-[20px] rotate-180">arrow_back</span>
@@ -59,6 +61,12 @@
   </div>
 </template>
 <script src="/static/chat.js" defer></script>
+{{end}}
+
+{{define "comando"}}
+<button type="button" data-comando="{{.Mensagem}}" class="shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-secondary-container/40 shadow-sm text-xs font-semibold active:scale-95">
+  <span class="icone text-[16px] text-primary">{{.Icone}}</span>{{.Rotulo}}
+</button>
 {{end}}
 
 {{define "atalho"}}
@@ -79,7 +87,7 @@
 {{define "nutri"}}
 <div class="flex items-start gap-2.5 pr-8">
   <img src="/static/nutri.png" alt="" class="w-8 h-8 rounded-full shrink-0 mt-0.5">
-  <p data-texto class="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm text-[15px] leading-relaxed whitespace-pre-wrap break-words">{{.}}</p>
+  <p data-texto class="bg-card rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm text-[15px] leading-relaxed whitespace-pre-wrap break-words">{{negrito .}}</p>
 </div>
 {{end}}
 

@@ -1,0 +1,210 @@
+{{define "conteudo"}}
+{{template "topo"}}
+{{$a := .A}}{{$dias := .Dias}}
+<main class="max-w-xl mx-auto px-5 pb-32 space-y-4">
+  <div class="flex items-center justify-between gap-3">
+    <h1 class="text-xl font-bold">Resumo</h1>
+    <nav class="flex gap-1 bg-card p-1 rounded-full shadow-sm" aria-label="Período">
+      {{range .Periodos}}
+      <a href="/resumo?dias={{.}}" class="px-3 py-1.5 rounded-full text-xs font-bold {{if eq . $dias}}bg-primary text-on-primary{{else}}text-on-surface-variant{{end}}">{{.}} dias</a>
+      {{end}}
+    </nav>
+  </div>
+
+  {{/* Cobertura antes de tudo: sem ela as médias enganam. */}}
+  <section class="bg-card rounded-3xl p-5 shadow-sm">
+    <div class="flex items-baseline justify-between">
+      <p class="text-sm font-semibold">Dias anotados</p>
+      <p class="text-2xl font-extrabold">{{$a.DiasRegistrados}}<span class="text-sm font-semibold text-on-surface-variant"> de {{$a.Dias}}</span></p>
+    </div>
+    <div class="flex gap-0.5 mt-3" aria-hidden="true">
+      {{range $a.PorDia}}<span class="flex-1 h-1.5 rounded-full {{if .Registrado}}bg-primary{{else}}bg-surface-container-high{{end}}"></span>{{end}}
+    </div>
+    {{if lt (pctNum $a.DiasRegistrados $a.Dias) 70.0}}
+    <p class="text-xs text-on-surface-variant mt-3">Com poucos dias anotados, as médias abaixo dizem pouco. Dias sem registro ficam fora das contas.</p>
+    {{end}}
+  </section>
+
+  {{if $a.DiasRegistrados}}
+  <section class="grid grid-cols-2 gap-3">
+    <div class="bg-card rounded-3xl p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Média por dia</p>
+      <p class="text-[28px] leading-tight font-extrabold">{{num $a.Media.Kcal}}</p>
+      <p class="text-xs text-on-surface-variant">kcal{{with $a.Meta}} · meta {{num .Kcal}}{{end}}</p>
+      <p class="text-xs text-on-surface-variant mt-1">varia ± {{num $a.DesvioKcal}} kcal</p>
+    </div>
+    <div class="bg-card rounded-3xl p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Proteína</p>
+      <p class="text-[28px] leading-tight font-extrabold">{{dec $a.Media.Prot}}<span class="text-sm font-semibold text-on-surface-variant"> g</span></p>
+      <p class="text-xs text-on-surface-variant">{{with $a.Meta}}meta {{num .Prot}} g{{else}}por dia{{end}}</p>
+      {{if $a.ProteinaPorKg}}<p class="text-xs text-on-surface-variant mt-1">{{dec $a.ProteinaPorKg}} g por kg</p>{{end}}
+    </div>
+    {{if $a.DiasComMeta}}
+    <div class="bg-card rounded-3xl p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Na meta de kcal</p>
+      <p class="text-[28px] leading-tight font-extrabold">{{$a.DiasNaMetaKcal}}<span class="text-sm font-semibold text-on-surface-variant"> de {{plural $a.DiasComMeta "dia" "dias"}}</span></p>
+      <p class="text-xs text-on-surface-variant">a até ±10% da meta</p>
+    </div>
+    <div class="bg-card rounded-3xl p-4 shadow-sm">
+      <p class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Bateu a proteína</p>
+      <p class="text-[28px] leading-tight font-extrabold">{{$a.DiasProteinaOK}}<span class="text-sm font-semibold text-on-surface-variant"> de {{plural $a.DiasComMeta "dia" "dias"}}</span></p>
+      <p class="text-xs text-on-surface-variant">proteína ≥ meta</p>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="bg-card rounded-3xl p-5 shadow-sm">
+    <h2 class="font-semibold">Calorias por dia</h2>
+    <p class="text-xs text-on-surface-variant mb-4">{{if .Kcal.MetaKcal}}A linha tracejada é a meta de {{num .Kcal.MetaKcal}} kcal.{{else}}Defina uma meta para ver a referência.{{end}}</p>
+    <div class="relative h-36">
+      {{if .Kcal.MetaPct}}
+      <div class="absolute inset-x-0 border-t-2 border-dashed border-outline z-10 pointer-events-none" style="bottom: {{.Kcal.MetaPct}}%"></div>
+      {{end}}
+      <div class="absolute inset-0 flex items-end gap-0.5">
+        {{range .Kcal.Barras}}
+        <div class="flex-1 h-full flex items-end" title="{{.Dica}}">
+          {{if .Registrado}}
+          <div class="w-full rounded-t {{if .Acima}}bg-tertiary{{else}}bg-primary{{end}}" style="height: {{.Altura}}%"></div>
+          {{else}}
+          <div class="w-full h-1 rounded-full bg-surface-container-high"></div>
+          {{end}}
+        </div>
+        {{end}}
+      </div>
+    </div>
+    {{if .Kcal.Rotular}}
+    <div class="flex gap-0.5 mt-1.5">
+      {{range .Kcal.Barras}}<span class="flex-1 text-center text-[10px] text-on-surface-variant">{{.Rotulo}}</span>{{end}}
+    </div>
+    {{end}}
+    <p class="text-[11px] text-on-surface-variant mt-2 flex items-center gap-3">
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-primary"></span>dia</span>
+      {{if .Kcal.TemAcima}}<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm bg-tertiary"></span>mais de 10% acima da meta</span>{{end}}
+    </p>
+    <details class="mt-3 text-sm">
+      <summary class="list-none cursor-pointer text-xs font-bold text-primary">Ver em tabela</summary>
+      <table class="w-full mt-2 text-xs">
+        <thead class="text-on-surface-variant"><tr><th class="text-left font-semibold py-1">Dia</th><th class="text-right font-semibold">kcal</th><th class="text-right font-semibold">P</th><th class="text-right font-semibold">C</th><th class="text-right font-semibold">G</th><th class="text-right font-semibold">Fibra</th></tr></thead>
+        <tbody>
+          {{range $a.PorDia}}
+          <tr class="border-t border-outline-variant/30">
+            <td class="py-1">{{rotuloData .Data}}</td>
+            {{if .Registrado}}
+            <td class="text-right font-semibold">{{num .Totais.Kcal}}</td><td class="text-right">{{dec .Totais.Prot}}</td><td class="text-right">{{dec .Totais.Carb}}</td><td class="text-right">{{dec .Totais.Gord}}</td><td class="text-right">{{dec .Totais.Fibra}}</td>
+            {{else}}<td colspan="5" class="text-right text-on-surface-variant">sem registro</td>{{end}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </details>
+  </section>
+
+  <section class="bg-card rounded-3xl p-5 shadow-sm">
+    <h2 class="font-semibold">Macros na média</h2>
+    <div class="space-y-2 mt-3">
+      {{$m := $a.Meta}}
+      {{template "barra" (barraDe "Proteína" "bg-prot" $a.Media.Prot (metaDe $m "prot"))}}
+      {{template "barra" (barraDe "Carboidrato" "bg-carb" $a.Media.Carb (metaDe $m "carb"))}}
+      {{template "barra" (barraDe "Gordura" "bg-gord" $a.Media.Gord (metaDe $m "gord"))}}
+    </div>
+    {{template "energia" $a.Distribuicao}}
+    <p class="text-xs text-on-surface-variant mt-3">Fibra <span class="font-bold text-on-surface">{{dec $a.Media.Fibra}} g</span> por dia{{if $a.PctEstimado}} · {{dec $a.PctEstimado}}% das kcal vieram de quantidades estimadas{{end}}</p>
+  </section>
+
+  <section class="bg-card rounded-3xl p-5 shadow-sm">
+    <h2 class="font-semibold mb-3">Por refeição</h2>
+    <ul class="space-y-2.5">
+      {{range $a.PorRefeicao}}
+      <li>
+        <div class="flex justify-between text-xs mb-1"><span class="font-semibold">{{.Nome}}</span><span><b>{{num .KcalMedia}} kcal</b> <span class="text-on-surface-variant">· {{dec .Pct}}%</span></span></div>
+        <div class="h-2 rounded-full bg-surface-container"><div class="h-full rounded-full bg-primary" style="width: {{.Pct}}%"></div></div>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+
+  <section class="bg-card rounded-3xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-5">
+    {{template "ranking" (rankingDe "Mais calorias" "kcal" $a.TopKcal)}}
+    {{template "ranking" (rankingDe "Mais proteína" "g" $a.TopProt)}}
+  </section>
+
+  <form method="post" action="/chat">
+    <input type="hidden" name="atalho" value="revisao">
+    <button class="w-full h-12 flex items-center justify-center gap-2 rounded-full bg-secondary-container/50 text-on-surface font-bold active:scale-95">
+      <img src="/static/nutri.png" alt="" class="w-7 h-7">Revisão da semana com o Nutri
+    </button>
+  </form>
+  {{end}}
+
+  {{template "peso" .}}
+</main>
+{{end}}
+
+{{define "ranking"}}
+<div>
+  <h3 class="text-sm font-semibold mb-2">{{.Titulo}}</h3>
+  <ol class="space-y-1.5 text-xs">
+    {{$u := .Unidade}}
+    {{range .Itens}}
+    <li class="flex justify-between gap-2"><span class="truncate">{{.Nome}}</span><span class="shrink-0 font-bold">{{num .Total}} {{$u}}</span></li>
+    {{else}}<li class="text-on-surface-variant">Nada no período.</li>{{end}}
+  </ol>
+</div>
+{{end}}
+
+{{define "peso"}}
+{{$p := .Peso}}
+<section id="peso" class="bg-card rounded-3xl p-5 shadow-sm space-y-4 scroll-mt-20">
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <h2 class="font-semibold">Peso</h2>
+      {{if $p.Ultima}}
+      <p class="text-[28px] leading-tight font-extrabold">{{dec2 $p.Tendencia}}<span class="text-sm font-semibold text-on-surface-variant"> kg</span></p>
+      <p class="text-xs text-on-surface-variant">tendência{{if $p.VariacaoSem}} · {{sinal $p.VariacaoSem}} kg na semana{{end}}</p>
+      {{else}}
+      <p class="text-xs text-on-surface-variant">Pese-se de manhã, de preferência todo dia. A tendência suaviza a oscilação de água.</p>
+      {{end}}
+    </div>
+    <form method="post" action="/peso" class="flex items-center gap-1.5 shrink-0">
+      <input type="hidden" name="dias" value="{{.Dias}}">
+      <input name="kg" inputmode="decimal" placeholder="kg" aria-label="Peso de hoje em kg" required
+        class="w-20 h-11 text-center font-bold bg-surface-container-low rounded-full focus:outline-none focus:ring-2 focus:ring-primary">
+      <button class="h-11 px-4 rounded-full bg-primary text-on-primary text-sm font-bold">Hoje</button>
+    </form>
+  </div>
+  {{if .ErroPeso}}<p class="bg-error-container text-on-error-container rounded-2xl px-4 py-2 text-sm" role="alert">{{.ErroPeso}}</p>{{end}}
+
+  {{with .GraficoPeso}}
+  <figure>
+    <svg viewBox="0 0 300 100" class="w-full h-28 overflow-visible" role="img" aria-label="Peso de {{.Inicio}} a {{.Fim}}, entre {{dec .Min}} e {{dec .Max}} kg">
+      <polyline points="{{.Linha}}" fill="none" class="stroke-primary" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      {{range .Pontos}}
+      <g><title>{{.Dica}}</title>
+        <circle cx="{{.X}}" cy="{{.Y}}" r="8" fill="transparent"/>
+        <circle cx="{{.X}}" cy="{{.Y}}" r="2.5" class="fill-on-surface-variant stroke-card" stroke-width="1"/>
+      </g>
+      {{end}}
+    </svg>
+    <figcaption class="flex justify-between text-[10px] text-on-surface-variant mt-1">
+      <span>{{.Inicio}}</span>
+      <span class="flex items-center gap-3">
+        <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-primary"></span>tendência</span>
+        <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>pesagem</span>
+      </span>
+      <span>{{.Fim}}</span>
+    </figcaption>
+  </figure>
+  {{end}}
+
+  <div class="rounded-2xl bg-surface-container-low p-4">
+    <p class="text-[11px] font-bold uppercase tracking-wide text-on-surface-variant">Gasto diário estimado (TDEE)</p>
+    {{if $p.TemTDEE}}
+    <p class="text-2xl font-extrabold">{{num $p.TDEE.Kcal}} <span class="text-sm font-semibold text-on-surface-variant">kcal</span></p>
+    <p class="text-xs text-on-surface-variant mt-1">Média de {{num $p.TDEE.MediaKcal}} kcal comidas em {{$p.TDEE.DiasRegistrados}} dias anotados, com a tendência {{if lt $p.TDEE.VariacaoKg 0.0}}caindo{{else}}subindo{{end}} {{dec2 (abs $p.TDEE.VariacaoKg)}} kg em {{$p.TDEE.Dias}} dias.</p>
+    {{else}}
+    <p class="text-sm mt-1">Ainda não dá para calcular: {{$p.FaltaParaTDEE}}.</p>
+    <p class="text-xs text-on-surface-variant mt-1">É o balanço entre o que você comeu e a variação do peso. Precisa de 14 dias de peso e de 70% dos dias com alimentação anotada.</p>
+    {{end}}
+  </div>
+</section>
+{{end}}

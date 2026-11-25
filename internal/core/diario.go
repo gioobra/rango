@@ -99,7 +99,7 @@ func (s *Servico) Registrar(ctx context.Context, reg Registro) ([]store.Lancamen
 			l := store.Lancamento{
 				Data: reg.Data.Format(FormatoData), Refeicao: reg.Refeicao,
 				AlimentoID: a.ID, AlimentoNome: a.Nome, Gramas: it.Gramas,
-				Kcal: m.Kcal, Prot: m.Prot, Carb: m.Carb, Gord: m.Gord,
+				Kcal: m.Kcal, Prot: m.Prot, Carb: m.Carb, Gord: m.Gord, Fibra: m.Fibra,
 				Origem: reg.Origem, Estimado: it.Estimado, CriadoEm: s.agora().Format(time.RFC3339),
 			}
 			if l.ID, err = r.InserirLancamento(ctx, l); err != nil {
@@ -139,6 +139,7 @@ func (s *Servico) Editar(ctx context.Context, id int64, e Edicao, origem string)
 			novo.Gramas = *e.Gramas
 			novo.Kcal, novo.Prot = arred(antes.Kcal*f), arred(antes.Prot*f)
 			novo.Carb, novo.Gord = arred(antes.Carb*f), arred(antes.Gord*f)
+			novo.Fibra = arred(antes.Fibra * f)
 		}
 		if e.Refeicao != nil {
 			if err := validarRefeicao(*e.Refeicao); err != nil {
@@ -246,10 +247,11 @@ func (s *Servico) Desfazer(ctx context.Context, origem string) (Desfeito, error)
 
 // Totais somados de lançamentos.
 type Totais struct {
-	Kcal float64
-	Prot float64
-	Carb float64
-	Gord float64
+	Kcal  float64
+	Prot  float64
+	Carb  float64
+	Gord  float64
+	Fibra float64
 }
 
 func (t *Totais) somar(l store.Lancamento) {
@@ -257,6 +259,7 @@ func (t *Totais) somar(l store.Lancamento) {
 	t.Prot = arred(t.Prot + l.Prot)
 	t.Carb = arred(t.Carb + l.Carb)
 	t.Gord = arred(t.Gord + l.Gord)
+	t.Fibra = arred(t.Fibra + l.Fibra)
 }
 
 // RefeicaoDoDia agrupa os lançamentos de uma refeição.

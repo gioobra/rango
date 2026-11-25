@@ -47,10 +47,12 @@
       </div>
     </div>
     <div class="space-y-2">
-      {{template "barra" (barraDe "Proteína" "bg-tertiary-container" $d.Totais.Prot $d.Meta.Prot)}}
-      {{template "barra" (barraDe "Carboidrato" "bg-primary" $d.Totais.Carb $d.Meta.Carb)}}
-      {{template "barra" (barraDe "Gordura" "bg-tertiary" $d.Totais.Gord $d.Meta.Gord)}}
+      {{template "barra" (barraDe "Proteína" "bg-prot" $d.Totais.Prot $d.Meta.Prot)}}
+      {{template "barra" (barraDe "Carboidrato" "bg-carb" $d.Totais.Carb $d.Meta.Carb)}}
+      {{template "barra" (barraDe "Gordura" "bg-gord" $d.Totais.Gord $d.Meta.Gord)}}
     </div>
+    {{template "energia" (distrib $d.Totais)}}
+    <p class="text-xs text-on-surface-variant mt-3">Fibra <span class="font-bold text-on-surface">{{dec $d.Totais.Fibra}} g</span></p>
     {{else}}
     <div class="text-center space-y-3 py-2">
       <p class="text-[28px] font-extrabold leading-none">{{num $d.Totais.Kcal}} <span class="text-base font-semibold text-on-surface-variant">kcal</span></p>
@@ -108,17 +110,4 @@
     </div>
   </div>
 </main>
-{{end}}
-
-{{define "barra"}}
-<div>
-  <div class="flex justify-between items-center mb-1 text-xs">
-    <span class="font-semibold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full {{.Cor}}"></span>{{.Nome}}</span>
-    {{if .Meta}}<span class="font-bold">{{num .Valor}} <span class="font-normal text-on-surface-variant">/ {{num .Meta}} g</span></span>
-    {{else}}<span class="font-bold">{{num .Valor}} g</span>{{end}}
-  </div>
-  <div class="w-full h-2 rounded-full bg-surface-container overflow-hidden">
-    <div class="h-full rounded-full {{.Cor}}" style="width: {{pct .Valor .Meta}}%"></div>
-  </div>
-</div>
 {{end}}

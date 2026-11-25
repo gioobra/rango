@@ -63,6 +63,7 @@ type eventoChat struct {
 type turno struct {
 	N        int
 	Pergunta Mensagem
+	comando  string // prompt do MCP, quando veio de um atalho
 	mu       sync.Mutex
 	eventos  []eventoChat
 	fim      bool
@@ -128,8 +129,21 @@ func (s *Servidor) chat(w http.ResponseWriter, r *http.Request) {
 }
 
 // enviar começa um turno e devolve a bolha do usuário e o espaço da resposta.
+// atalhos rodam os prompts do MCP. A bolha mostra o rótulo; o Nutri recebe o comando.
+var atalhos = map[string]struct {
+	rotulo string
+	prompt func() string
+}{
+	"revisao": {"Revisão da semana", func() string { return agent.Comando("revisao_semanal") }},
+	"sugerir": {"O que eu como agora?", func() string { return agent.Comando("sugerir_refeicao", lerRefeicao("")) }},
+}
+
 func (s *Servidor) enviar(w http.ResponseWriter, r *http.Request) {
 	texto := strings.TrimSpace(r.FormValue("mensagem"))
+	comando := ""
+	if a, ok := atalhos[r.FormValue("atalho")]; ok {
+		texto, comando = a.rotulo, a.prompt()
+	}
 	if texto == "" {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -147,12 +161,16 @@ func (s *Servidor) enviar(w http.ResponseWriter, r *http.Request) {
 	}
 	c.nTurno++
 	t := &turno{N: c.nTurno, Pergunta: Mensagem{DoUsuario: true, Texto: texto, Cartao: -1, Hora: time.Now()},
-		aviso: make(chan struct{})}
+		comando: comando, aviso: make(chan struct{})}
 	c.turno = t
 	sessao := c.sessao
 	c.mu.Unlock()
 
 	go s.responder(t, sessao)
+	if r.Header.Get("HX-Request") == "" { // botão de outra tela: abre o chat acompanhando o turno
+		http.Redirect(w, r, "/chat", http.StatusSeeOther)
+		return
+	}
 	s.render(w, http.StatusOK, "chat", "turno", t)
 }
 
@@ -169,7 +187,11 @@ func (s *Servidor) responder(t *turno, sessao string) {
 		}
 		atual.Reset()
 	}
-	nova, err := s.agente.Conversar(ctx, sessao, t.Pergunta.Texto, func(e agent.Evento) {
+	msg, ehComando := t.Pergunta.Texto, t.comando != ""
+	if ehComando {
+		msg = t.comando
+	}
+	nova, err := s.agente.Conversar(ctx, sessao, msg, ehComando, func(e agent.Evento) {
 		switch e.Tipo {
 		case agent.Texto:
 			atual.WriteString(e.Texto)
