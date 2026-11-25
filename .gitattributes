@@ -1,0 +1,3 @@
+design/** linguist-documentation
+internal/web/static/htmx.min.js linguist-vendored
+internal/web/static/app.css linguist-generated
