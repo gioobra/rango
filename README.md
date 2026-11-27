@@ -14,7 +14,7 @@
 [![TACO](https://img.shields.io/badge/alimentos-TACO%204ª%20ed.-994100?style=flat-square)](#dados-e-créditos)
 [![Licença MIT](https://img.shields.io/badge/licença-MIT-555555?style=flat-square)](LICENSE)
 
-[O que faz](#o-que-faz) · [Telas](#telas) · [Instalação](#instalação) · [Uso](#uso) · [MCP](#use-o-mcp-em-outros-clientes) · [Desenvolvimento](#desenvolvimento) · [Plano](PLANO.md)
+[O que faz](#o-que-faz) · [Telas](#telas) · [Instalação](#instalação) · [Uso](#uso) · [Docker](#docker) · [MCP](#use-o-mcp-em-outros-clientes) · [Desenvolvimento](#desenvolvimento) · [Plano](PLANO.md)
 
 </div>
 
@@ -90,12 +90,14 @@ Celular (navegador / PWA) ──Tailscale──► rango serve (PC)
 
 O **Rango** é o app: um binário Go que roda no seu PC. O **Nutri** é o Claude Code em modo headless, conversando com o Rango via MCP, sem acesso a terminal, arquivos ou web. Sem o Claude Code, todo o resto funciona e o chat avisa que o Nutri está indisponível.
 
+O Nutri também pode rodar por qualquer API compatível com a da OpenAI (Ollama local, OpenRouter, Groq, Gemini, LM Studio, OpenAI): defina `RANGO_LLM_MODEL` e o chat passa a usar a API, com as mesmas ferramentas. Nenhum modelo fora do Claude foi testado ainda; modelos pequenos costumam errar as chamadas de ferramenta.
+
 ## Instalação
 
 ### Requisitos
 
 - Go 1.27 ou mais novo
-- Para o Nutri: [Claude Code](https://claude.com/claude-code) instalado e com login feito (`claude` no PATH)
+- Para o Nutri: [Claude Code](https://claude.com/claude-code) instalado e com login feito (`claude` no PATH), ou uma API compatível com a da OpenAI (veja `RANGO_LLM_*`)
 - Para desenvolver: [Tailwind CLI standalone](https://github.com/tailwindlabs/tailwindcss/releases) (`tailwindcss` no PATH) e `golangci-lint`
 
 No Arch: `sudo pacman -S go golangci-lint && paru -S tailwindcss-bin`.
@@ -117,6 +119,10 @@ Escreva um valor por linha, sem aspas e sem comentário no fim da linha: o `make
 | `RANGO_ADDR` | `127.0.0.1:8080` | Endereço de escuta. Só aceita localhost ou um IP da Tailscale. |
 | `RANGO_DB` | `~/.local/share/rango/rango.db` | Arquivo SQLite. É criado na primeira execução, já com a TACO. |
 | `RANGO_CLAUDE` | `claude` | Binário do Claude Code usado pelo Nutri. Defina o caminho completo se o `claude` não estiver no PATH do serviço. |
+| `RANGO_LLM_MODEL` | (nenhum) | Modelo da API, como `qwen3:14b` no Ollama. Definido, o Nutri usa a API em vez do Claude Code. |
+| `RANGO_LLM_URL` | API da OpenAI | Base da API, como `http://localhost:11434/v1` (Ollama) ou `https://openrouter.ai/api/v1`. |
+| `RANGO_LLM_KEY` | (nenhum) | Chave da API. O Ollama não pede. |
+| `RANGO_PERMITIR_EXTERNO` | (desligado) | `1` libera escutar fora de localhost e da Tailscale. Só para containers; a imagem já liga. |
 
 O `make` lê o `.env` sozinho. Se rodar o binário direto, exporte as variáveis antes.
 
@@ -157,6 +163,16 @@ Na aba Resumo, escolha 7, 14 ou 30 dias para ver dias anotados, médias, aderên
 3. No celular, abra `http://100.x.y.z:8080`. Para instalar como app, use "Adicionar à tela inicial".
 
 </details>
+
+### Docker
+
+A imagem não tem o Claude Code, então no container o Nutri funciona só pela API. Crie um `.env` ao lado do `docker-compose.yml` com `RANGO_SENHA` e `RANGO_LLM_MODEL` (e `RANGO_LLM_KEY`, se a API pedir) e suba:
+
+```sh
+docker compose up -d --build
+```
+
+O exemplo aponta para o Ollama no host (`http://host.docker.internal:11434/v1`); para uma API externa, troque `RANGO_LLM_URL` no `docker-compose.yml`. O banco fica no volume `rango`, e a porta é publicada só em `127.0.0.1:8080`. Para o celular, use a Tailscale no host.
 
 ### Use o MCP em outros clientes
 

@@ -3,7 +3,7 @@
 Diário alimentar local, leve e em português, com um agente (**Nutri**) que registra, corrige, planeja e analisa o que você come.
 
 - **Rango** é o app: binário Go único, roda no PC, acessado pelo celular via Tailscale.
-- **Nutri** é o agente: Claude Code em modo headless, conversando com o Rango via MCP.
+- **Nutri** é o agente: Claude Code em modo headless (padrão) ou um modelo por uma API compatível com a da OpenAI, sempre com as ferramentas do MCP do Rango.
 
 ---
 
@@ -17,8 +17,8 @@ Celular (navegador / PWA) ──Tailscale──► rango serve (PC)
 ```
 
 - Tudo roda no PC. O celular só abre a interface web.
-- O chat da web é **apenas um cliente** do MCP. O mesmo MCP funciona no Claude Code, no Claude Desktop ou em qualquer outro cliente. Trocar o motor do chat (API direta, Ollama) não muda as ferramentas.
-- O modelo roda na nuvem da Anthropic. Dados e programa ficam no PC.
+- O chat da web é **apenas um cliente** do MCP. O mesmo MCP funciona no Claude Code, no Claude Desktop ou em qualquer outro cliente. Trocar o motor do chat (`claude -p` ou API) não muda as ferramentas (seção 7).
+- Com o `claude -p`, o modelo roda na nuvem da Anthropic; com a API, onde ela estiver (Ollama local, por exemplo). Dados e programa ficam no PC.
 - O `claude -p` chama o próprio executável do Rango (`rango mcp`) como servidor MCP, apontando para o mesmo banco. A web e o MCP escrevem no mesmo SQLite (WAL com `busy_timeout`).
 
 ## 2. Funcionalidades
@@ -46,6 +46,7 @@ Fora do escopo: exercícios e treinos.
 | Banco | SQLite via `modernc.org/sqlite` | Sem CGO, um arquivo só |
 | MCP | SDK oficial em Go (`modelcontextprotocol/go-sdk` v1.8) | Transporte stdio, esquema das ferramentas gerado das structs |
 | Agente | `claude -p` (headless, `stream-json`, `--resume`) | Usa o login do Claude Code local |
+| Agente (alternativo) | API compatível com a da OpenAI via `openai-go/v3` (SDK oficial) | Ollama, Gemini, Groq, OpenRouter, LM Studio e OpenAI sem o Claude Code; o SDK acumula os pedaços de `tool_calls` do streaming |
 | Alimentos | Tabela TACO (Unicamp) embutida como seed | Alimentos brasileiros desde a primeira execução |
 
 Referência de código: `grafana/mcp-grafana` (MCP oficial em Go).
@@ -70,6 +71,7 @@ Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`,
 - **CSS gerado e versionado:** `internal/web/static/app.css` sai do Tailwind CLI (`make css`) e vai no git, para `go build` funcionar sem o Tailwind instalado. A entrada é `internal/web/tailwind.css`. O tema escuro troca as variáveis de cor via `prefers-color-scheme`, sem classes `dark:`.
 - **Dados fora do repositório**, seguindo XDG: banco em `~/.local/share/rango/rango.db`.
 - **Poucas dependências.** Cada dependência nova precisa de um motivo claro.
+- **Imagem Docker** multi-stage (`CGO_ENABLED=0`) sobre `gcr.io/distroless/static-debian12:nonroot`, que já traz os certificados para as APIs em HTTPS. Não tem o `claude` nem Node, então no container o Nutri só funciona pela API (`RANGO_LLM_MODEL`); sem ela, a web sobe sem chat. O banco fica no volume `/data`.
 
 ### Estrutura de pastas
 ```
@@ -83,8 +85,9 @@ rango/
 │   ├── store/            # SQLite: repositórios, migrations/, seed/ (TACO)
 │   ├── web/              # handlers, templates/, static/
 │   ├── mcp/              # ferramentas e prompts MCP → core
-│   └── agent/            # ponte com o claude -p, prompt do Nutri (embutido)
+│   └── agent/            # provedores do Nutri (claude -p e API OpenAI-compatible), prompt embutido
 ├── go.mod, go.sum
+├── Dockerfile, .dockerignore, docker-compose.yml   # imagem distroless, Nutri só pela API
 ├── .gitignore            # .env e bin/
 ├── Makefile
 ├── README.md
@@ -179,6 +182,13 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - Nunca remover sem confirmação.
 - Responder em português, de forma curta e em texto simples (a web não renderiza markdown).
 
+### Provedores
+- A web só conhece `agent.Provedor` (`Disponivel` e `Conversar`). Os dois motores emitem os mesmos eventos (texto, ferramenta, resultado), então cartões, desfazer e `internal/web/chat.go` não mudam com o motor.
+- **`claude -p`** (padrão): chama `rango mcp` como subprocesso, com as flags da seção 8.
+- **API** (`internal/agent/api.go`), ligada quando `RANGO_LLM_MODEL` está definido (`RANGO_LLM_URL` e `RANGO_LLM_KEY` opcionais; sem URL vale a da OpenAI). Conecta ao `mcp.Novo(...)` no mesmo processo por `InMemoryTransport`: `ListTools` vira a lista de ferramentas da API, `CallTool` executa no `core` e `GetPrompt` expande os atalhos `/mcp__nutri__<prompt> <args>`, com os argumentos na ordem declarada pelo prompt. O prompt expandido leva o `[agora: ...]`, porque ali não é comando.
+- Na API, o histórico fica na memória por sessão (até 8 sessões), e cada turno tem no máximo 20 rodadas de ferramentas. Um turno com erro não entra no histórico, para ele nunca terminar numa chamada sem resposta. Erros de ferramenta voltam ao modelo como texto, para ele corrigir.
+- O teste da API usa um `httptest.Server` com streaming SSE falso, o MCP em memória e SQLite temporário, sem chave real.
+
 ### Chat na web
 - O turno roda numa goroutine e guarda os eventos (texto, ferramenta, cartão, erro, fim). O SSE (`/chat/turnos/{n}`) retoma pelo `Last-Event-ID`, então o celular pode dormir no meio da resposta. Um turno por vez, com limite de 5 min.
 - O streaming usa `EventSource` num `chat.js` pequeno, em vez da extensão SSE do htmx: menos um arquivo de terceiros e controle do reenvio.
@@ -194,11 +204,13 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 ## 8. Segurança
 
 - `rango serve` escuta **só** na interface da Tailscale ou em localhost, nunca em `0.0.0.0`.
-- `rango serve` recusa qualquer endereço que não seja loopback, `100.64.0.0/10` ou `fd7a:115c:a1e0::/48` (Tailscale).
+- `rango serve` recusa qualquer endereço que não seja loopback, `100.64.0.0/10` ou `fd7a:115c:a1e0::/48` (Tailscale), salvo com `RANGO_PERMITIR_EXTERNO=1` (ver Containers abaixo).
 - A web pede senha, mesmo dentro da Tailscale. A senha vem de `RANGO_SENHA` e o servidor não sobe sem ela. A sessão fica num cookie assinado com HMAC-SHA256, com chave derivada da senha (trocar a senha derruba as sessões), `HttpOnly` e `SameSite=Strict`, o que já protege os formulários de CSRF. Senha errada espera 1 s.
 - O `claude -p` roda com `--restricted --tools "" --strict-mcp-config --mcp-config <só o Rango> --allowedTools "mcp__nutri__*" --permission-mode dontAsk`: sem Bash, sem edição de arquivos, sem web e sem os MCPs e configurações do usuário. A mensagem vai pelo stdin, para não ser lida como flag.
 - O agente roda em `~/.local/share/rango/nutri/` (ao lado do banco), isolado do repositório. O `mcp.json` é gerado ali a cada início.
 - O MCP é só stdio, então não precisa de autenticação nem de exposição na rede.
+- **Provedor de API:** as flags do `claude -p` não se aplicam, mas não fazem falta. O modelo só enxerga as ferramentas do `mcp.Novo(...)` em memória, sem Bash, arquivos ou web.
+- **Containers:** `RANGO_PERMITIR_EXTERNO=1` libera escutar em qualquer endereço (como `0.0.0.0` dentro do container), com um aviso no log. O `docker-compose.yml` publica a porta só em `127.0.0.1`, então o app continua fora da rede do host; para o celular, Tailscale no host ou num sidecar.
 
 ## 9. Fases
 
@@ -207,6 +219,7 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - [x] **2. Nutri**: `rango mcp` (stdio), chat via `claude -p` com streaming, cartões de lançamento com desfazer
 - [x] **3. Receitas e marmitas**: alimento composto, rendimento, porções
 - [x] **4. Planejar e analisar**: análise determinística no `core` (fibra, distribuição de energia, médias e aderência por período, tendência de peso, TDEE adaptativo), peso, aba Resumo, prompts de revisão semanal e sugestão
+- [x] **5. Self-hosting**: provedor de API compatível com a da OpenAI, `RANGO_PERMITIR_EXTERNO`, imagem Docker e `docker-compose.yml`, licença MIT
 
 ## 10. Em aberto
 
@@ -225,28 +238,8 @@ O prompt (`internal/agent/nutri.txt`) fica embutido no binário e é passado com
 - Na busca, nomes curtos ganham: "frango" traz "Frango, com açafrão" e "Salpicão" antes do peito grelhado. Avaliar pesar os alimentos mais usados pelo usuário.
 - A tela Adicionar fica vazia antes de buscar. Mostrar recentes ou mais usados da refeição pede uma consulta nova no `core`.
 - Em tela larga, o gráfico de peso fica estreito e centralizado (o SVG mantém a proporção), e os rótulos do eixo se afastam dele. No celular fica certo.
+- Modelo mínimo para a API: nenhum foi testado ainda. Modelos pequenos erram chamadas de ferramenta ou fazem conta por conta própria, e o `nutri.txt` foi afinado para o Claude. Testar (Ollama e um de nuvem) e indicar no README.
+- O build da imagem Docker ainda não rodou de ponta a ponta (o podman local não montava overlay). O build estático com `CGO_ENABLED=0` e a subida em `0.0.0.0` foram verificados fora do container.
+- O `openai-go` levou o binário de 17 MB para 52 MB. Se pesar, a alternativa é um cliente HTTP/SSE próprio, descartado antes pelo risco com os pedaços de `tool_calls`.
+- O histórico da API cresce sem limite dentro da sessão (as saídas das ferramentas são grandes). Avaliar cortar as rodadas antigas.
 - Microanimações, só com CSS e o que o htmx já tem: troca de abas e de páginas com View Transitions (`@view-transition` entre páginas e `transition:true` nas trocas do htmx), entrada de lançamentos e cartões do chat com `@starting-style` e resposta ao toque (`:active` com leve escala). Tudo desligado com `prefers-reduced-motion`.
-
-## 11. Ideias
-
-Evoluções pensadas para facilitar o self-hosting e permitir rodar o Nutri sem depender exclusivamente do Claude Code local, preservando a arquitetura atual (`web` e `mcp` → `core` → `store`).
-
-### Provedor de API OpenAI-compatible (`internal/agent`)
-- **Interface `agent.Provedor`:** extrair `Disponivel()` e `Conversar(...)` para uma interface, mantendo o backend `claude -p` intacto como padrão quando nenhuma API externa estiver configurada.
-- **SDK oficial (`github.com/openai/openai-go/v3`):** preferido em vez de um cliente HTTP/SSE artesanal para evitar bugs em chunks fragmentados de `tool_calls` (`ChatCompletionAccumulator`), mantendo apenas uma dependência nova no `go.mod`.
-- **Reaproveitamento do MCP em memória:** o backend de API conecta-se diretamente ao `mcp.Novo(...)` no mesmo processo via `InMemoryTransport` do `modelcontextprotocol/go-sdk`. `ListTools` alimenta as ferramentas da API, `CallTool` executa no `core` emitindo os mesmos eventos (`Ferramenta` e `Resultado`, preservando os cartões com "Desfazer" sem alterar `internal/web/chat.go`), e `GetPrompt` expande os atalhos (`revisao_semanal`, `sugerir_refeicao`).
-- **Configuração por ambiente:** `RANGO_LLM_URL`, `RANGO_LLM_MODEL` e `RANGO_LLM_KEY` (opcional). Quando `RANGO_LLM_MODEL` está definido, o servidor usa o backend de API — compatível com Ollama local (gratuito), Gemini, Groq, OpenRouter, LM Studio e OpenAI.
-- **Sessão e limites:** histórico da conversa mantido em memória por sessão (alinhado ao comportamento atual do chat) e limite de iterações de tool calls por turno.
-- **Atalhos sem o `claude -p`:** quem expande `/mcp__nutri__<prompt> <args>` hoje é o `claude -p`. No backend de API, o `internal/agent` detecta o prefixo e chama `GetPrompt`, e `internal/web/chat.go` não muda.
-- **Segurança:** as flags do `claude -p` (seção 8) não se aplicam aqui, mas não fazem falta. O modelo só enxerga as ferramentas do `mcp.Novo(...)` em memória, sem Bash, arquivos ou web. A `--read-only` continua valendo.
-- **Modelos locais:** o `nutri.txt` foi afinado para o Claude. Modelos pequenos erram chamadas de ferramenta ou fazem conta por conta própria, então o README deve indicar um modelo mínimo testado.
-- **Testes sem chave real:** `httptest.Server` simulando streaming SSE e chamadas de ferramenta contra o MCP em memória e SQLite temporário.
-
-### Docker e self-hosting
-- **Rede configurável via ambiente:** manter `ValidarEndereco` restrito a `localhost` e Tailscale por padrão, adicionando opt-in via `RANGO_PERMITIR_EXTERNO=1` para liberar bind em `0.0.0.0` dentro de containers sem exigir flags extras no CLI.
-- **Imagem enxuta (`Dockerfile` + `.dockerignore`):** build multi-stage (`CGO_ENABLED=0`) gerando imagem final em `gcr.io/distroless/static-debian12:nonroot` (~20 MB, com CA certs para chamadas HTTPS às APIs de LLM e sem Node/Tailwind no build porque `app.css` já é versionado).
-- **Só com o backend de API:** a imagem distroless não tem o `claude` nem Node, então no container o Nutri depende de `RANGO_LLM_MODEL`. Sem ele, a web sobe sem chat.
-- **`docker-compose.yml`:** exemplo pronto com volume persistente em `/data` (`RANGO_DB=/data/rango.db`) e variáveis comentadas para Ollama no host (`http://host.docker.internal:11434/v1`) ou API externa. A porta é publicada só em `127.0.0.1:8080:8080`, ou por um sidecar da Tailscale, para que o `RANGO_PERMITIR_EXTERNO` valha só dentro do container e o app continue fora da rede do host (seção 8).
-
-### Licença
-- Código licenciado sob **MIT** (`LICENSE`), compatível com todas as dependências e assets embutidos; dados da TACO, fontes e bibliotecas mantêm suas atribuições no `README.md`.
