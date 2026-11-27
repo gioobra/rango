@@ -57,6 +57,7 @@ Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`,
 - **Tipografia e ícones:** Plus Jakarta Sans e Material Symbols Outlined.
 - **Identidade:** o ícone do app é um robozinho nutricionista com uma folha, usado também como avatar do Nutri. O app não usa fotos de pessoas nem de comida.
 - **Adaptação para os templates:** o HTML do Stitch é só referência, porque puxa Tailwind por CDN, fontes do Google Fonts e imagens do `googleusercontent`. Os templates reescrevem as telas com os mesmos tokens, e tudo isso fica embutido no binário (ver Princípios na seção 4). O robô virou o ícone do PWA e o avatar (`nutri.png`); o logo do Stitch foi trocado pelo ícone `nutrition`.
+- **Imagens do README:** ficam em `design/readme/`, em WebP, com versão clara e escura trocadas por `<picture>` e `prefers-color-scheme`. As capturas são do app de verdade, rodando com um banco de demonstração preenchido pelo `rango mcp` (nunca com o banco pessoal), e foram tiradas no Chrome headless em 390×844. O banner é um HTML com o ícone, a Plus Jakarta Sans e duas capturas, renderizado em PNG e convertido. Ao mudar uma tela, refaça a captura correspondente.
 - **Iteração pelo Claude Code:** o Stitch MCP e as skills `google-labs-code/stitch-skills` ficam no escopo do usuário, não no repositório. As telas reais vão para o projeto do Stitch como HTML autossuficiente (página logada, com CSS, fontes e imagens embutidos), e as variantes geradas lá servem de referência para reescrever os templates. Foi assim que o Resumo foi refeito (seção 5). O Astryx (Meta) foi avaliado e descartado, porque exige React e build de JS.
 
 ## 4. Arquitetura e organização
@@ -75,6 +76,7 @@ Projeto no Stitch: "Rango Diário Alimentar". O export fica em `design/stitch/`,
 rango/
 ├── .claude/              # CLAUDE.md (regras de trabalho) e skills/docs/
 ├── design/stitch/        # export bruto do Stitch (referência, não vai no binário)
+├── design/readme/        # banner e capturas do README (WebP, claro e escuro)
 ├── cmd/rango/            # main: subcomandos serve (fase 1) | mcp (fase 2) | import (em aberto)
 ├── internal/
 │   ├── core/             # domínio: alimentos, porções, lançamentos, receitas, metas, resumos
