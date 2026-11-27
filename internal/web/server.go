@@ -33,7 +33,7 @@ var staticFS embed.FS
 // Servidor é a aplicação web.
 type Servidor struct {
 	svc      *core.Servico
-	agente   *agent.Agente
+	agente   agent.Provedor
 	conversa *conversa
 	sessao   *sessao
 	paginas  map[string]*template.Template
@@ -41,7 +41,7 @@ type Servidor struct {
 }
 
 // Novo monta o servidor. A senha é obrigatória.
-func Novo(svc *core.Servico, agente *agent.Agente, senha string, log *slog.Logger) (*Servidor, error) {
+func Novo(svc *core.Servico, agente agent.Provedor, senha string, log *slog.Logger) (*Servidor, error) {
 	if senha == "" {
 		return nil, errors.New("defina RANGO_SENHA: a web sempre pede senha")
 	}
@@ -53,12 +53,13 @@ func Novo(svc *core.Servico, agente *agent.Agente, senha string, log *slog.Logge
 }
 
 // ValidarEndereco aceita só localhost ou um IP da Tailscale (100.64.0.0/10 ou fd7a:115c:a1e0::/48).
-func ValidarEndereco(addr string) error {
+// Com externo (RANGO_PERMITIR_EXTERNO=1, para containers), aceita qualquer endereço.
+func ValidarEndereco(addr string, externo bool) error {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return fmt.Errorf("endereço inválido %q: %w", addr, err)
 	}
-	if host == "localhost" {
+	if externo || host == "localhost" {
 		return nil
 	}
 	ip, err := netip.ParseAddr(host)
@@ -70,7 +71,7 @@ func ValidarEndereco(addr string) error {
 	if ip.IsLoopback() || tailscale4.Contains(ip) || tailscale6.Contains(ip) {
 		return nil
 	}
-	return fmt.Errorf("o Rango só escuta em localhost ou na Tailscale, não em %s", host)
+	return fmt.Errorf("o Rango só escuta em localhost ou na Tailscale, não em %s (num container, use RANGO_PERMITIR_EXTERNO=1)", host)
 }
 
 func (s *Servidor) carregarTemplates() error {

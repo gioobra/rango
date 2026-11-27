@@ -1,5 +1,6 @@
-// Package agent liga o Rango ao Nutri: roda o claude -p em modo headless, com o
-// MCP do próprio Rango como única ferramenta, e traduz o stream-json em eventos.
+// Package agent liga o Rango ao Nutri. Há dois provedores: o claude -p em modo
+// headless (padrão), que chama o MCP do Rango como subprocesso, e uma API compatível
+// com a da OpenAI (api.go), que fala com o MCP na memória. Os dois emitem os mesmos eventos.
 package agent
 
 import (
@@ -23,7 +24,17 @@ var promptNutri string
 // prefixo das ferramentas do MCP "nutri" vistas pelo claude.
 const prefixo = "mcp__nutri__"
 
-// Config diz onde estão as peças.
+// Provedor é o motor do chat. A web só conhece esta interface.
+type Provedor interface {
+	// Disponivel diz por que o Nutri não pode responder, ou nil.
+	Disponivel() error
+	// Conversar manda a mensagem ao Nutri, continuando a sessão se houver, e chama emitir
+	// a cada evento. Devolve o id da sessão para a próxima mensagem. Com comando, a
+	// mensagem é um prompt do MCP montado por Comando.
+	Conversar(ctx context.Context, sessao, mensagem string, comando bool, emitir func(Evento)) (string, error)
+}
+
+// Config diz onde estão as peças do claude -p.
 type Config struct {
 	Claude string // binário do claude (no PATH ou caminho completo)
 	Rango  string // executável do rango, que o claude chama como servidor MCP
@@ -31,14 +42,14 @@ type Config struct {
 	Dir    string // diretório de trabalho do agente, isolado do repositório
 }
 
-// Agente conversa com o Nutri.
-type Agente struct {
+// Claude conversa com o Nutri pelo claude -p.
+type Claude struct {
 	cfg       Config
 	mcpConfig string
 }
 
-// Novo prepara o diretório de trabalho e a configuração do MCP.
-func Novo(cfg Config) (*Agente, error) {
+// NovoClaude prepara o diretório de trabalho e a configuração do MCP.
+func NovoClaude(cfg Config) (*Claude, error) {
 	if err := os.MkdirAll(cfg.Dir, 0o700); err != nil {
 		return nil, err
 	}
@@ -49,12 +60,12 @@ func Novo(cfg Config) (*Agente, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &Agente{cfg: cfg, mcpConfig: filepath.Join(cfg.Dir, "mcp.json")}
+	a := &Claude{cfg: cfg, mcpConfig: filepath.Join(cfg.Dir, "mcp.json")}
 	return a, os.WriteFile(a.mcpConfig, b, 0o600)
 }
 
 // Disponivel diz se o binário do claude foi encontrado.
-func (a *Agente) Disponivel() error {
+func (a *Claude) Disponivel() error {
 	_, err := exec.LookPath(a.cfg.Claude)
 	if err != nil {
 		return fmt.Errorf("claude não encontrado (%s): instale o Claude Code ou defina RANGO_CLAUDE", a.cfg.Claude)
@@ -80,16 +91,22 @@ type Evento struct {
 
 var diasSemana = []string{"domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"}
 
+// comAgora põe a data e a hora na frente da mensagem.
+func comAgora(mensagem string) string {
+	agora := time.Now()
+	return fmt.Sprintf("[agora: %s, %s %s]\n%s",
+		agora.Format("2006-01-02"), diasSemana[agora.Weekday()], agora.Format("15:04"), mensagem)
+}
+
 // Comando monta a chamada de um prompt do MCP do Rango ("/mcp__nutri__revisao_semanal").
 // Só o código monta comandos: o texto digitado nunca vira comando, porque leva o prefixo de data.
 func Comando(prompt string, args ...string) string {
 	return strings.Join(append([]string{"/" + prefixo + prompt}, args...), " ")
 }
 
-// Conversar manda a mensagem ao Nutri, continuando a sessão se houver, e chama emitir
-// a cada evento. Devolve o id da sessão para a próxima mensagem. Com comando, a mensagem
-// vai como está (ver Comando).
-func (a *Agente) Conversar(ctx context.Context, sessao, mensagem string, comando bool, emitir func(Evento)) (string, error) {
+// Conversar implementa Provedor. Com comando, a mensagem vai como está, e o claude
+// expande o prompt do MCP.
+func (a *Claude) Conversar(ctx context.Context, sessao, mensagem string, comando bool, emitir func(Evento)) (string, error) {
 	if err := a.Disponivel(); err != nil {
 		return sessao, err
 	}
@@ -108,9 +125,7 @@ func (a *Agente) Conversar(ctx context.Context, sessao, mensagem string, comando
 	// A data vai na mensagem porque a conversa atravessa dias. Comandos vão sem prefixo,
 	// senão o claude não os reconhece; os prompts do MCP já pedem os dados de hoje.
 	if !comando {
-		agora := time.Now()
-		mensagem = fmt.Sprintf("[agora: %s, %s %s]\n%s",
-			agora.Format("2006-01-02"), diasSemana[agora.Weekday()], agora.Format("15:04"), mensagem)
+		mensagem = comAgora(mensagem)
 	}
 	cmd.Stdin = strings.NewReader(mensagem)
 	var stderr bytes.Buffer

@@ -37,6 +37,10 @@ variáveis de ambiente:
   RANGO_ADDR    endereço de escuta (padrão 127.0.0.1:8080; aceita localhost ou IP da Tailscale)
   RANGO_DB      caminho do banco (padrão ~/.local/share/rango/rango.db)
   RANGO_CLAUDE  binário do Claude Code usado pelo Nutri (padrão claude, do PATH)
+  RANGO_LLM_MODEL  modelo de uma API compatível com a da OpenAI; definido, o Nutri usa a API e não o claude
+  RANGO_LLM_URL    base da API (ex.: http://localhost:11434/v1 para o Ollama; padrão a da OpenAI)
+  RANGO_LLM_KEY    chave da API (opcional)
+  RANGO_PERMITIR_EXTERNO  1 libera escutar fora de localhost e da Tailscale (para containers)
 `
 
 func main() {
@@ -85,27 +89,40 @@ func abrirBanco(ctx context.Context) (*store.Store, error) {
 	return store.Abrir(ctx, caminho)
 }
 
-// novoAgente prepara o Nutri: o claude chama este mesmo executável como servidor MCP.
-func novoAgente(log *slog.Logger) (*agent.Agente, error) {
+// novoAgente escolhe o motor do Nutri. Com RANGO_LLM_MODEL, uma API compatível com a da
+// OpenAI, falando com o MCP na memória. Sem ele, o claude -p, que chama este mesmo
+// executável como servidor MCP.
+func novoAgente(ctx context.Context, svc *core.Servico, log *slog.Logger) (agent.Provedor, func(), error) {
+	if modelo := os.Getenv("RANGO_LLM_MODEL"); modelo != "" {
+		a, err := agent.NovoAPI(ctx, agent.ConfigAPI{
+			URL: os.Getenv("RANGO_LLM_URL"), Modelo: modelo, Chave: os.Getenv("RANGO_LLM_KEY"),
+			MCP: mcp.Novo(svc, versao, false),
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		log.Info("Nutri pela API", "modelo", modelo, "url", env("RANGO_LLM_URL", "OpenAI"))
+		return a, func() { _ = a.Fechar() }, nil
+	}
 	db, err := caminhoBanco()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	exe, err := os.Executable()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	a, err := agent.Novo(agent.Config{
+	a, err := agent.NovoClaude(agent.Config{
 		Claude: env("RANGO_CLAUDE", "claude"), Rango: exe, DB: db,
 		Dir: filepath.Join(filepath.Dir(db), "nutri"),
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := a.Disponivel(); err != nil {
 		log.Warn("chat sem o Nutri", "err", err)
 	}
-	return a, nil
+	return a, func() {}, nil
 }
 
 func serve(args []string, log *slog.Logger) error {
@@ -113,7 +130,8 @@ func serve(args []string, log *slog.Logger) error {
 	addr := fs.String("addr", env("RANGO_ADDR", "127.0.0.1:8080"), "endereço de escuta")
 	_ = fs.Parse(args)
 
-	if err := web.ValidarEndereco(*addr); err != nil {
+	externo := os.Getenv("RANGO_PERMITIR_EXTERNO") == "1"
+	if err := web.ValidarEndereco(*addr, externo); err != nil {
 		return err
 	}
 	ctx, parar := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -125,11 +143,13 @@ func serve(args []string, log *slog.Logger) error {
 	}
 	defer func() { _ = db.Fechar() }()
 
-	agente, err := novoAgente(log)
+	svc := core.Novo(db)
+	agente, fechar, err := novoAgente(ctx, svc, log)
 	if err != nil {
 		return err
 	}
-	srv, err := web.Novo(core.Novo(db), agente, os.Getenv("RANGO_SENHA"), log)
+	defer fechar()
+	srv, err := web.Novo(svc, agente, os.Getenv("RANGO_SENHA"), log)
 	if err != nil {
 		return err
 	}
@@ -140,6 +160,9 @@ func serve(args []string, log *slog.Logger) error {
 		defer cancel()
 		_ = h.Shutdown(c)
 	}()
+	if externo {
+		log.Warn("RANGO_PERMITIR_EXTERNO ligado: publique a porta só em 127.0.0.1 ou pela Tailscale")
+	}
 	log.Info("Rango no ar", "endereco", "http://"+*addr)
 	if err := h.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
